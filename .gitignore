@@ -1,0 +1,43 @@
+# ===== macOS =====
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.cursor/
+.history/
+
+# ===== 依赖 =====
+# 插件本身是纯 JS，不需要构建；若后续引入 npm 依赖，只忽略依赖目录，锁文件要提交
+node_modules/
+.npm/
+.yarn/cache/
+.pnpm-store/
+
+# ===== 构建与打包产物 =====
+# PluginPack 生成的 dist/local.<id>-<version>.piplug 可随时重新打包
+dist/
+*.piplug
+
+# ===== 本地环境与密钥 =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 日志与临时文件 =====
+*.log
+npm-debug.log*
+yarn-error.log*
+.tmp/
+*.tmp
+*.bak
