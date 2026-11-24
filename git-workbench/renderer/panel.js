@@ -42,6 +42,7 @@ const els = {
   historyCount: $("historyCount"),
   historyMore: $("historyMore"),
   historyBody: $("historyBody"),
+  historyFoot: $("historyFoot"),
   commits: $("commits"),
   historyEmpty: $("historyEmpty"),
   overlay: $("overlay"),
@@ -213,6 +214,7 @@ const STRINGS = {
     "history.title": "提交历史",
     "history.collapse": "折叠或展开提交历史",
     "history.more": "加载更多提交",
+    "history.loadingMore": "正在加载更多提交…",
     "history.empty": "此仓库还没有提交记录。",
     "history.loading": "读取提交历史…",
     "diff.commitSub": "{0} · 提交差异",
@@ -312,6 +314,7 @@ const STRINGS = {
     "history.title": "Commit history",
     "history.collapse": "Collapse or expand commit history",
     "history.more": "Load more commits",
+    "history.loadingMore": "Loading more commits…",
     "history.empty": "No commits in this repository yet.",
     "history.loading": "Reading commit history…",
     "diff.commitSub": "{0} · commit diff",
@@ -785,10 +788,13 @@ function renderLists() {
 
 function groupHtml(key, title, entries, staged) {
   const collapsed = state.collapsed[key];
+  // The icons stay on screen even for an empty group, so they read as
+  // unavailable instead of disappearing.
+  const idle = entries.length === 0 ? " disabled" : "";
   const actions = staged
-    ? `<button class="mini" data-act="unstage-all" title="${t("act.unstageAll")}" aria-label="${t("act.unstageAll")}">−</button>`
-    : `<button class="mini" data-act="stage-all" title="${t("act.stageAll")}" aria-label="${t("act.stageAll")}">＋</button>` +
-      `<button class="mini" data-act="discard-all" title="${t("act.discardAll")}" aria-label="${t("act.discardAll")}">${DISCARD}</button>`;
+    ? `<button class="mini"${idle} data-act="unstage-all" title="${t("act.unstageAll")}" aria-label="${t("act.unstageAll")}">−</button>`
+    : `<button class="mini"${idle} data-act="stage-all" title="${t("act.stageAll")}" aria-label="${t("act.stageAll")}">＋</button>` +
+      `<button class="mini"${idle} data-act="discard-all" title="${t("act.discardAll")}" aria-label="${t("act.discardAll")}">${DISCARD}</button>`;
   const rows = entries.map((entry) => fileRow(entry, staged)).join("");
   const body = collapsed
     ? ""
@@ -931,7 +937,7 @@ function renderHistory() {
   els.history.dataset.collapsed = history.collapsed ? "true" : "false";
   els.historyToggle.setAttribute("aria-expanded", String(!history.collapsed));
   els.historyBody.hidden = history.collapsed;
-  els.historyMore.hidden = history.collapsed || !history.truncated;
+  syncHistoryFoot();
   els.historyCount.hidden = history.commits.length === 0;
   els.historyCount.textContent = String(history.commits.length);
 
@@ -949,6 +955,46 @@ function renderHistory() {
     history.error || (history.loaded ? t("history.empty") : t("history.loading"));
 }
 
+/* The header button and the footer both follow "there is another page", not
+ * the raw flag: git may still report truncation once the cap is reached. */
+function canLoadMoreHistory(history) {
+  return !history.collapsed && history.truncated && history.limit < HISTORY_MAX;
+}
+
+function syncHistoryFoot() {
+  const history = state.history;
+  const more = canLoadMoreHistory(history);
+  els.historyMore.hidden = !more || history.loading;
+  els.historyFoot.hidden = !more || !history.loading;
+  els.historyFoot.textContent = els.historyFoot.hidden ? "" : t("history.loadingMore");
+}
+
+/*
+ * Reaching the bottom of the list loads the next page by itself. The header
+ * button stays for keyboard users and as the retry after a failed load, and a
+ * page that lands short of the pane asks for the next one until it scrolls.
+ */
+const HISTORY_AUTOLOAD_GAP = 48;
+let historyCheckFrame = 0;
+
+function maybeLoadMoreHistory() {
+  const history = state.history;
+  if (history.loading || history.error) return;
+  if (!canLoadMoreHistory(history)) return;
+  const body = els.historyBody;
+  if (body.hidden) return;
+  if (body.scrollHeight - body.scrollTop - body.clientHeight > HISTORY_AUTOLOAD_GAP) return;
+  loadMoreHistory();
+}
+
+function scheduleHistoryCheck() {
+  if (historyCheckFrame) return;
+  historyCheckFrame = requestAnimationFrame(() => {
+    historyCheckFrame = 0;
+    maybeLoadMoreHistory();
+  });
+}
+
 async function loadHistory(options = {}) {
   const history = state.history;
   if (history.loading) return;
@@ -961,12 +1007,16 @@ async function loadHistory(options = {}) {
   const limit = Math.min(Math.max(Number(options.limit) || history.limit, 1), HISTORY_MAX);
   history.loading = true;
   if (!history.loaded) renderHistory();
+  else syncHistoryFoot();
 
   try {
     const result = await invoke("git.log", { limit });
+    const previousCount = history.commits.length;
     history.commits = Array.isArray(result?.commits) ? result.commits : [];
     history.limit = Number(result?.limit) || limit;
-    history.truncated = Boolean(result?.truncated);
+    // A page that adds nothing means git has nothing left to give: stop
+    // offering another one instead of asking again on every scroll.
+    history.truncated = Boolean(result?.truncated) && history.commits.length > previousCount;
     history.error = "";
     history.loaded = true;
 
@@ -983,6 +1033,8 @@ async function loadHistory(options = {}) {
   } finally {
     history.loading = false;
     renderHistory();
+    // A page shorter than the pane leaves it unscrollable: fill it right away.
+    scheduleHistoryCheck();
   }
 }
 
@@ -990,6 +1042,9 @@ function loadMoreHistory() {
   const history = state.history;
   const next = Math.min(history.limit + HISTORY_PAGE, HISTORY_MAX);
   if (next <= history.limit) return;
+  // Clearing the last failure lets the header button retry the page the
+  // auto-load gave up on.
+  history.error = "";
   loadHistory({ limit: next });
 }
 
@@ -1526,6 +1581,7 @@ function bindEvents() {
     renderHistory();
   });
   els.historyMore.addEventListener("click", loadMoreHistory);
+  els.historyBody.addEventListener("scroll", scheduleHistoryCheck, { passive: true });
 
   els.commits.addEventListener("click", (event) => {
     const file = event.target.closest(".commit-file");
