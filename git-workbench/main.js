@@ -5,9 +5,9 @@
  *
  * Plugin id : local.git-workbench
  * View      : work-panel view "changes" (contributes.views)
- * Channels  : git.state / git.diff / git.stage / git.unstage / git.stageAll /
- *             git.unstageAll / git.discard / git.commit / git.pull / git.push /
- *             git.generateMessage
+ * Channels  : git.state / git.log / git.diff / git.commitFiles / git.commitDiff /
+ *             git.stage / git.unstage / git.stageAll / git.unstageAll /
+ *             git.discard / git.commit / git.pull / git.push / git.generateMessage
  *
  * Design notes
  * - All git access lives in ./git.js: spawn("git", [...]) with argument
@@ -30,6 +30,8 @@ const git = require("./git");
 const MAX_PATHS = 500;
 const MAX_PROMPT_DIFF_CHARS = 12_000;
 const MAX_MESSAGE_CHARS = 8_000;
+const HISTORY_PAGE = 30;
+const MAX_HISTORY = 200;
 
 const TEXT = {
   en: {
@@ -92,6 +94,15 @@ function requirePaths(payload, { allowEmpty = false } = {}) {
     }
     return filePath;
   });
+}
+
+/** A commit id the panel obtained from git.log; never interpolated into a shell. */
+function requireSha(payload) {
+  const sha = String(payload?.sha ?? "");
+  if (!git.isSafeSha(sha)) {
+    throw fail("INVALID_ARGUMENT", `Not a commit id: ${sha}`);
+  }
+  return sha;
 }
 
 async function repoContext() {
@@ -283,6 +294,29 @@ async function onPanelInvoke(channel, payload) {
   switch (channel) {
     case "git.state":
       return readState();
+
+    case "git.log": {
+      const { root } = await repoContext();
+      const requested = Number(input.limit);
+      const limit = Number.isFinite(requested)
+        ? Math.min(Math.max(Math.trunc(requested), 1), MAX_HISTORY)
+        : HISTORY_PAGE;
+      const commits = await git.log(root, limit);
+      return { ok: true, commits, limit, truncated: commits.length >= limit };
+    }
+
+    case "git.commitFiles": {
+      const sha = requireSha(input);
+      const { root } = await repoContext();
+      return { ok: true, sha, files: await git.commitFiles(root, sha) };
+    }
+
+    case "git.commitDiff": {
+      const sha = requireSha(input);
+      const [filePath] = requirePaths({ paths: [input.path] });
+      const { root } = await repoContext();
+      return { ok: true, sha, path: filePath, patch: await git.commitDiff(root, sha, filePath) };
+    }
 
     case "git.diff": {
       const [filePath] = requirePaths({ paths: [input.path] });

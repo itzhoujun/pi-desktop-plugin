@@ -36,6 +36,14 @@ const els = {
   lists: $("lists"),
   statusRepo: $("statusRepo"),
   statusLast: $("statusLast"),
+  history: $("history"),
+  historyHead: $("historyHead"),
+  historyToggle: $("historyToggle"),
+  historyCount: $("historyCount"),
+  historyMore: $("historyMore"),
+  historyBody: $("historyBody"),
+  commits: $("commits"),
+  historyEmpty: $("historyEmpty"),
   overlay: $("overlay"),
   sheetTitle: $("sheetTitle"),
   sheetSub: $("sheetSub"),
@@ -44,10 +52,31 @@ const els = {
   sheetBack: $("sheetBack"),
   sheetClose: $("sheetClose"),
   toasts: $("toasts"),
+  split: $("split"),
+  splitter: $("splitter"),
+  diffPane: $("diffPane"),
+  diffTitle: $("diffTitle"),
+  diffSub: $("diffSub"),
+  diffStat: $("diffStat"),
+  diffBody: $("diffBody"),
+  diffClose: $("diffClose"),
 };
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 const MOD_KEY = IS_MAC ? "⌘" : "Ctrl+";
+
+/* The panel asks for one page at a time and caps growth like git.log does. */
+const HISTORY_PAGE = 30;
+const HISTORY_MAX = 200;
+
+/* The composer grows up to this many lines, then scrolls. */
+const MESSAGE_MAX_ROWS = 8;
+let messageStream = null;
+
+/* Split pane: the diff keeps at least DIFF_MIN, the work panel keeps MAIN_MIN. */
+const DIFF_MIN = 200;
+const MAIN_MIN = 200;
+const DIFF_STEP = 24;
 
 const state = {
   data: null,
@@ -56,6 +85,29 @@ const state = {
   collapsed: { staged: false, changes: false },
   sheet: { mode: null, resolve: null },
   pollTimer: null,
+  history: {
+    repoRoot: null,
+    commits: [],
+    limit: HISTORY_PAGE,
+    truncated: false,
+    expanded: null,
+    files: new Map(),
+    loading: false,
+    loaded: false,
+    collapsed: false,
+    error: "",
+  },
+
+  /* The right-hand diff pane: the target it shows, plus a load token so a slow
+   * response for an older target can never overwrite a newer one. */
+  diff: {
+    open: false,
+    path: "",
+    staged: false,
+    sha: null,
+    token: 0,
+    width: 0,
+  },
 };
 
 const CHEVRON =
@@ -197,6 +249,55 @@ function firstLine(text, limit = 220) {
   return line.length > limit ? `${line.slice(0, limit)}…` : line;
 }
 
+// ------------------------------------------------------------------ history
+
+/*
+ * Commit history is a separate read-only view: it never takes part in
+ * applyState()'s signature check, so staging files does not repaint it.
+ */
+
+const RELATIVE_TIME =
+  typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function"
+    ? new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" })
+    : null;
+
+const TIME_UNITS = [
+  ["year", 365 * 24 * 3600],
+  ["month", 30 * 24 * 3600],
+  ["day", 24 * 3600],
+  ["hour", 3600],
+  ["minute", 60],
+];
+
+function parseTime(iso) {
+  const time = Date.parse(iso || "");
+  return Number.isFinite(time) ? time : null;
+}
+
+function absoluteTime(iso) {
+  const time = parseTime(iso);
+  if (time === null) return "";
+  const date = new Date(time);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
+/** "3 天前" style; falls back to the absolute date when Intl is unavailable. */
+function relativeTime(iso) {
+  const time = parseTime(iso);
+  if (time === null) return "";
+  const seconds = (time - Date.now()) / 1000;
+  const abs = Math.abs(seconds);
+  if (abs < 45) return "刚刚";
+  for (const [unit, size] of TIME_UNITS) {
+    if (abs < size && unit !== "minute") continue;
+    const value = Math.round(seconds / size);
+    return RELATIVE_TIME ? RELATIVE_TIME.format(value, unit) : absoluteTime(iso);
+  }
+  return absoluteTime(iso);
+}
 function toast(text, kind = "info") {
   const node = document.createElement("div");
   node.className = "toast";
@@ -223,10 +324,31 @@ function showBanner(text, kind = "error") {
 
 /*
  * A panel is its own document, so the host never hands us its `--ds-*` design
- * tokens. `app.getAppearance()` does return the active theme, and for a plugin
- * theme it carries that theme's CSS text — enough to mirror the host's primary
- * action pair (text-primary on bg-primary) instead of hard-coding a colour.
+ * tokens. `app.getAppearance()` does return the active theme, and a plugin theme
+ * carries that theme's CSS text, so the panel mirrors every palette family it
+ * can: surfaces, borders, text and the semantic state colours. Whatever a theme
+ * does not define keeps the `:root` literal in panel.css, which already tracks
+ * the host's own palette.
  */
+
+const THEME_TOKENS = {
+  "--bg": ["bg-primary"],
+  "--bg-soft": ["bg-secondary"],
+  "--surface": ["bg-tertiary", "bg-secondary"],
+  "--surface-hover": ["bg-hover", "tile-hover", "bg-elevated"],
+  "--field": ["field-inset-bg", "bg-inset"],
+  "--border": ["border-default"],
+  "--border-soft": ["border-subtle"],
+  "--fg": ["text-primary"],
+  "--fg-strong": ["text-primary"],
+  "--muted": ["text-muted", "text-secondary"],
+  "--muted-dim": ["text-faint", "text-tertiary"],
+  "--add": ["success"],
+  "--del": ["error"],
+  "--danger": ["error"],
+  "--mod": ["warning"],
+  "--conflict": ["warning"],
+};
 
 function themeTokensFromCss(css) {
   const tokens = new Map();
@@ -239,16 +361,57 @@ function themeTokensFromCss(css) {
   return tokens;
 }
 
+const NEUTRAL_COLORS = new Set(["white", "black", "gray", "grey", "silver", "transparent"]);
+
+/*
+ * White / black / grey. The host's own accent is `#fff` in dark and ink
+ * `#1a1c1f` in light, which would flatten our highlight into a neutral, so an
+ * accent token only lands when it actually carries a hue.
+ */
+function isNeutralColor(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return true;
+  if (NEUTRAL_COLORS.has(raw)) return true;
+  let rgb = null;
+  const hex = /^#([0-9a-f]{3,8})$/.exec(raw);
+  if (hex) {
+    let digits = hex[1];
+    if (digits.length === 3 || digits.length === 4) {
+      digits = [...digits].map((digit) => digit + digit).join("");
+    }
+    if (digits.length < 6) return false;
+    rgb = [0, 2, 4].map((index) => parseInt(digits.slice(index, index + 2), 16));
+  } else {
+    const fn = /^rgba?\(([^)]+)\)$/.exec(raw);
+    if (!fn) return false;
+    rgb = fn[1]
+      .split(/[\s,/]+/)
+      .filter(Boolean)
+      .slice(0, 3)
+      .map((part) => (part.endsWith("%") ? (parseFloat(part) * 255) / 100 : parseFloat(part)));
+    if (rgb.length !== 3 || rgb.some((channel) => !Number.isFinite(channel))) return false;
+  }
+  const [r, g, b] = rgb;
+  return Math.max(r, g, b) - Math.min(r, g, b) <= 12;
+}
+
 function applyThemeTokens(appearance) {
   const tokens = themeTokensFromCss(appearance?.pluginTheme?.css);
   const root = document.documentElement;
-  const primary = tokens.get("text-primary") || tokens.get("accent");
+  const overrides = new Map();
+  for (const [name, candidates] of Object.entries(THEME_TOKENS)) {
+    const value = candidates.map((key) => tokens.get(key)).find(Boolean);
+    if (value) overrides.set(name, value);
+  }
+  const accent = tokens.get("accent");
+  if (accent && !isNeutralColor(accent)) overrides.set("--accent", accent);
+  // Primary action pair kept for the commit button: text-primary on bg-primary.
+  const primary = tokens.get("text-primary") || accent;
   const surface = tokens.get("bg-primary");
-  for (const [name, value] of [
-    ["--theme-primary", primary],
-    ["--theme-primary-fg", surface],
-  ]) {
-    if (value) root.style.setProperty(name, value);
+  if (primary) overrides.set("--theme-primary", primary);
+  if (surface) overrides.set("--theme-primary-fg", surface);
+  for (const name of [...Object.keys(THEME_TOKENS), "--accent", "--theme-primary", "--theme-primary-fg"]) {
+    if (overrides.has(name)) root.style.setProperty(name, overrides.get(name));
     else root.style.removeProperty(name);
   }
 }
@@ -288,6 +451,15 @@ function applyState(data, options = {}) {
   state.data = data;
   const signature = signatureOf(data);
   renderHeader();
+
+  // Another repository invalidates the history and its cached file lists.
+  const repoRoot = data?.repo?.root || null;
+  if (state.history.repoRoot !== repoRoot) {
+    state.history.repoRoot = repoRoot;
+    resetHistory();
+    renderHistory();
+  }
+
   if (options.quiet && signature === state.signature) return;
   state.signature = signature;
   renderLists();
@@ -418,6 +590,341 @@ function fileRow(entry, staged) {
   </li>`;
 }
 
+// ------------------------------------------------------------- commit history
+
+function resetHistory() {
+  const history = state.history;
+  history.commits = [];
+  history.limit = HISTORY_PAGE;
+  history.truncated = false;
+  history.expanded = null;
+  history.files.clear();
+  history.loading = false;
+  history.loaded = false;
+  history.error = "";
+}
+
+function commitPropsHtml(commit) {
+  const parents = commit.parents.length
+    ? commit.parents.map((sha) => `<span class="mono">${escapeHtml(sha.slice(0, 7))}</span>`).join(" ")
+    : "（根提交）";
+  const committer =
+    commit.committer && commit.committer !== commit.author
+      ? `<span class="props-rel">${escapeHtml(commit.committer)}</span>`
+      : "";
+  const rows = [
+    ["提交", `<span class="mono">${escapeHtml(commit.sha)}</span>`],
+    ["作者", escapeHtml(commit.author)],
+    [
+      "作者时间",
+      `${escapeHtml(absoluteTime(commit.authorDate))}<span class="props-rel">${escapeHtml(
+        relativeTime(commit.authorDate),
+      )}</span>`,
+    ],
+    ["提交时间", `${escapeHtml(absoluteTime(commit.commitDate))}${committer}`],
+    ["父提交", parents],
+  ];
+  if (commit.body) rows.push(["说明", `<span class="props-body">${escapeHtml(commit.body)}</span>`]);
+
+  return `<dl class="props">${rows
+    .map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`)
+    .join("")}</dl>`;
+}
+
+function commitFileRow(sha, file) {
+  const badge = fileBadge(file.path);
+  const { name, dir } = splitPath(file.path);
+  const path = escapeHtml(file.path);
+  return `<li class="commit-file" data-sha="${escapeHtml(sha)}" data-path="${path}" tabindex="0" role="button" title="${path}">
+    <span class="ftype" style="--ft:${badge.color}">${escapeHtml(badge.label)}</span>
+    <span class="ftext"><span class="fname">${escapeHtml(name)}</span>${
+      dir ? `<span class="fdir">${escapeHtml(dir)}</span>` : ""
+    }</span>
+    ${
+      file.origPath
+        ? `<span class="corig" title="原路径 ${escapeHtml(file.origPath)}">← ${escapeHtml(file.origPath)}</span>`
+        : ""
+    }
+    <span class="fstat stat-${escapeHtml(file.letter)}">${escapeHtml(file.letter)}</span>
+  </li>`;
+}
+
+function commitFilesHtml(sha) {
+  const entry = state.history.files.get(sha);
+  if (!entry) return `<div class="commit-files-note">读取改动文件…</div>`;
+  if (entry.error) return `<div class="commit-files-note">${escapeHtml(entry.error)}</div>`;
+  if (entry.files.length === 0) return `<div class="commit-files-note">该提交没有文件改动。</div>`;
+  return `<ul class="commit-files">${entry.files
+    .map((file) => commitFileRow(sha, file))
+    .join("")}</ul>`;
+}
+
+function commitRowHtml(commit) {
+  const expanded = state.history.expanded === commit.sha;
+  const subject = commit.subject || "（无提交说明）";
+  const title = `${subject} — ${commit.author} · ${absoluteTime(commit.authorDate)}`;
+  return `<li class="commit" data-sha="${escapeHtml(commit.sha)}" data-expanded="${expanded ? "1" : "0"}">
+    <div class="commit-line" role="button" tabindex="0" aria-expanded="${expanded}" title="${escapeHtml(title)}">
+      <span class="csha">${escapeHtml(commit.shortSha)}</span>
+      <span class="csub">${escapeHtml(subject)}</span>
+      <span class="cauthor">${escapeHtml(commit.author)}</span>
+      <span class="ctime">· ${escapeHtml(relativeTime(commit.authorDate))}</span>
+    </div>
+    ${expanded ? `<div class="commit-detail">${commitPropsHtml(commit)}${commitFilesHtml(commit.sha)}</div>` : ""}
+  </li>`;
+}
+
+function renderHistory() {
+  const history = state.history;
+  const hasRepo = Boolean(state.data && state.data.repo);
+  els.history.hidden = !hasRepo;
+  if (!hasRepo) {
+    els.commits.innerHTML = "";
+    els.historyEmpty.hidden = true;
+    return;
+  }
+
+  els.historyToggle.dataset.collapsed = history.collapsed ? "true" : "false";
+  els.history.dataset.collapsed = history.collapsed ? "true" : "false";
+  els.historyToggle.setAttribute("aria-expanded", String(!history.collapsed));
+  els.historyBody.hidden = history.collapsed;
+  els.historyMore.hidden = history.collapsed || !history.truncated;
+  els.historyCount.hidden = history.commits.length === 0;
+  els.historyCount.textContent = String(history.commits.length);
+
+  // Keep the reader where they were when only the expanded row changed.
+  const scrollTop = els.historyBody.scrollTop;
+  els.commits.innerHTML = history.commits.map(commitRowHtml).join("");
+  els.historyBody.scrollTop = scrollTop;
+
+  if (history.commits.length > 0) {
+    els.historyEmpty.hidden = true;
+    return;
+  }
+  els.historyEmpty.hidden = false;
+  els.historyEmpty.textContent =
+    history.error || (history.loaded ? "此仓库还没有提交记录。" : "读取提交历史…");
+}
+
+async function loadHistory(options = {}) {
+  const history = state.history;
+  if (history.loading) return;
+  if (!state.data || !state.data.repo) {
+    history.commits = [];
+    renderHistory();
+    return;
+  }
+
+  const limit = Math.min(Math.max(Number(options.limit) || history.limit, 1), HISTORY_MAX);
+  history.loading = true;
+  if (!history.loaded) renderHistory();
+
+  try {
+    const result = await invoke("git.log", { limit });
+    history.commits = Array.isArray(result?.commits) ? result.commits : [];
+    history.limit = Number(result?.limit) || limit;
+    history.truncated = Boolean(result?.truncated);
+    history.error = "";
+    history.loaded = true;
+
+    // Drop cached file lists for commits that fell out of the current page.
+    const present = new Set(history.commits.map((commit) => commit.sha));
+    if (history.expanded && !present.has(history.expanded)) history.expanded = null;
+    for (const sha of [...history.files.keys()]) {
+      if (!present.has(sha)) history.files.delete(sha);
+    }
+  } catch (error) {
+    history.error = errorText(error);
+    history.loaded = true;
+    if (history.commits.length === 0) toast(history.error, "error");
+  } finally {
+    history.loading = false;
+    renderHistory();
+  }
+}
+
+function loadMoreHistory() {
+  const history = state.history;
+  const next = Math.min(history.limit + HISTORY_PAGE, HISTORY_MAX);
+  if (next <= history.limit) return;
+  loadHistory({ limit: next });
+}
+
+async function loadCommitFiles(sha) {
+  try {
+    const result = await invoke("git.commitFiles", { sha });
+    state.history.files.set(sha, {
+      files: Array.isArray(result?.files) ? result.files : [],
+      error: "",
+    });
+  } catch (error) {
+    state.history.files.set(sha, { files: [], error: errorText(error) });
+  }
+  if (state.history.expanded === sha) renderHistory();
+}
+
+async function toggleCommit(sha) {
+  const history = state.history;
+  if (!sha) return;
+  if (history.expanded === sha) {
+    history.expanded = null;
+    renderHistory();
+    return;
+  }
+  history.expanded = sha;
+  renderHistory();
+  const row = els.commits.querySelector(`.commit[data-sha="${sha}"] .commit-line`);
+  if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
+  if (!history.files.has(sha)) await loadCommitFiles(sha);
+}
+
+/** One file inside one commit, shown in the same split pane the working diff uses. */
+function openCommitDiff(sha, filePath) {
+  const short = String(sha).slice(0, 7);
+  const token = beginDiff({ path: filePath, sha });
+  openDiffPane({
+    title: filePath,
+    sub: `${short} · 提交差异`,
+    body: `<div class="patch-note">读取差异…</div>`,
+  });
+
+  return invoke("git.commitDiff", { sha, path: filePath }).then(
+    (result) => showPatch(token, result?.patch, `<div class="patch-note">该提交对这个文件没有可显示的文本差异。</div>`),
+    (error) => {
+      if (state.diff.token !== token) return;
+      els.diffBody.innerHTML = `<div class="patch-note">${escapeHtml(errorText(error))}</div>`;
+    },
+  );
+}
+
+// ---------------------------------------------------------------- split pane
+
+function splitBounds() {
+  const total = els.split.clientWidth || 0;
+  const max = Math.max(total - MAIN_MIN, 0);
+  return { total, min: Math.min(DIFF_MIN, max), max };
+}
+
+/** Clamp the requested diff width and hand it to CSS; the pane reads it back. */
+function setDiffWidth(width) {
+  const { total, min, max } = splitBounds();
+  if (!total) return;
+  const next = Math.round(Math.min(Math.max(Number(width) || 0, min), max));
+  if (next === state.diff.width && els.split.style.getPropertyValue("--diff-width")) return;
+  state.diff.width = next;
+  els.split.style.setProperty("--diff-width", `${next}px`);
+  els.splitter.setAttribute("aria-valuemin", String(min));
+  els.splitter.setAttribute("aria-valuemax", String(max));
+  els.splitter.setAttribute("aria-valuenow", String(next));
+}
+
+function openDiffPane({ title, sub, body }) {
+  els.diffTitle.textContent = title || "";
+  els.diffTitle.title = title || "";
+  els.diffSub.textContent = sub || "";
+  els.diffSub.hidden = !sub;
+  els.diffStat.hidden = true;
+  els.diffStat.textContent = "";
+  els.diffBody.innerHTML = body || "";
+  els.diffBody.scrollTop = 0;
+  els.diffPane.hidden = false;
+  els.splitter.hidden = false;
+  state.diff.open = true;
+  setDiffWidth(state.diff.width || splitBounds().total / 2);
+}
+
+function closeDiffPane() {
+  state.diff.token += 1; // drop any in-flight load
+  state.diff.open = false;
+  state.diff.path = "";
+  state.diff.staged = false;
+  state.diff.sha = null;
+  els.diffPane.hidden = true;
+  els.splitter.hidden = true;
+  els.diffBody.innerHTML = "";
+  els.diffStat.hidden = true;
+  els.diffStat.textContent = "";
+  els.diffTitle.textContent = "";
+  els.diffSub.textContent = "";
+  els.split.style.removeProperty("--diff-width");
+}
+
+/** Point the pane at a new target, and return the token that guards its load. */
+function beginDiff(target) {
+  state.diff.token += 1;
+  state.diff.path = target.path || "";
+  state.diff.staged = Boolean(target.staged);
+  state.diff.sha = target.sha || null;
+  return state.diff.token;
+}
+
+function patchStat(patch) {
+  let add = 0;
+  let del = 0;
+  for (const line of String(patch).split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) add += 1;
+    else if (line.startsWith("-")) del += 1;
+  }
+  return { add, del };
+}
+
+function showDiffStat(stat) {
+  if (!stat || (!stat.add && !stat.del)) {
+    els.diffStat.hidden = true;
+    els.diffStat.textContent = "";
+    return;
+  }
+  els.diffStat.innerHTML = `<span class="dstat-add">+${stat.add}</span><span class="dstat-del">−${stat.del}</span>`;
+  els.diffStat.hidden = false;
+}
+
+/** Render a patch unless the pane has already moved on to another target. */
+function showPatch(token, patch, emptyHtml) {
+  if (state.diff.token !== token) return;
+  const text = String(patch || "");
+  if (!text.trim()) {
+    showDiffStat(null);
+    els.diffBody.innerHTML = emptyHtml;
+    return;
+  }
+  showDiffStat(patchStat(text));
+  els.diffBody.innerHTML = patchHtml(text);
+  els.diffBody.scrollTop = 0;
+}
+
+function onSplitterDown(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  const right = els.split.getBoundingClientRect().right;
+  els.splitter.dataset.dragging = "true";
+  document.body.classList.add("is-resizing");
+  if (typeof els.splitter.setPointerCapture === "function") {
+    els.splitter.setPointerCapture(event.pointerId);
+  }
+
+  const move = (moveEvent) => setDiffWidth(right - moveEvent.clientX);
+  const stop = () => {
+    els.splitter.removeEventListener("pointermove", move);
+    els.splitter.removeEventListener("pointerup", stop);
+    els.splitter.removeEventListener("pointercancel", stop);
+    delete els.splitter.dataset.dragging;
+    document.body.classList.remove("is-resizing");
+  };
+
+  els.splitter.addEventListener("pointermove", move);
+  els.splitter.addEventListener("pointerup", stop);
+  els.splitter.addEventListener("pointercancel", stop);
+}
+
+function onSplitterKey(event) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  // ArrowLeft pulls the divider left, which gives the diff pane more room.
+  const step = (event.shiftKey ? 64 : DIFF_STEP) * (event.key === "ArrowLeft" ? 1 : -1);
+  setDiffWidth(state.diff.width + step);
+}
+
 // ----------------------------------------------------------------------- sheet
 
 function openSheet({ title, sub, body, footer, mode }) {
@@ -506,28 +1013,31 @@ function patchHtml(patch) {
 }
 
 async function openDiff(filePath, staged) {
-  openSheet({
+  const token = beginDiff({ path: filePath, staged });
+  openDiffPane({
     title: filePath,
     sub: staged ? "已暂存" : "工作区",
     body: `<div class="patch-note">读取差异…</div>`,
-    mode: "diff",
   });
 
   try {
     const result = await invoke("git.diff", { path: filePath, staged });
-    if (state.sheet.mode !== "diff") return;
+    if (state.diff.token !== token) return;
     const sub = [staged ? "已暂存" : "工作区"];
     if (result.untracked) sub.push("未跟踪文件");
     if (result.conflict) sub.push("存在冲突");
-    els.sheetSub.textContent = sub.join(" · ");
-    els.sheetBody.innerHTML = String(result.patch || "").trim()
-      ? patchHtml(result.patch)
-      : `<div class="patch-note">${
-          result.untracked ? "该未跟踪文件没有可显示的文本差异。" : "没有可显示的差异。"
-        }</div>`;
+    els.diffSub.textContent = sub.join(" · ");
+    els.diffSub.hidden = false;
+    showPatch(
+      token,
+      result.patch,
+      `<div class="patch-note">${
+        result.untracked ? "该未跟踪文件没有可显示的文本差异。" : "没有可显示的差异。"
+      }</div>`,
+    );
   } catch (error) {
-    if (state.sheet.mode !== "diff") return;
-    els.sheetBody.innerHTML = `<div class="patch-note">${escapeHtml(errorText(error))}</div>`;
+    if (state.diff.token !== token) return;
+    els.diffBody.innerHTML = `<div class="patch-note">${escapeHtml(errorText(error))}</div>`;
   }
 }
 
@@ -551,6 +1061,8 @@ async function withBusy(label, fn) {
 async function loadState(options = {}) {
   const result = await withBusy("refresh", () => invoke("git.state"));
   if (result) applyState(result, options);
+  // History is a separate read-only call, so the 6 s poll never pays for it.
+  if (result?.repo) await loadHistory();
   return result;
 }
 
@@ -602,7 +1114,7 @@ async function commit(forceAll) {
   if (!data || !data.repo) return;
   const message = els.message.value.trim();
   if (!message) {
-    toast("请先填写提交信息，或点 ✨ 用模型生成一条。", "error");
+    toast("请先填写提交信息，或点右上角的 AI 按钮让模型写一条。", "error");
     els.message.focus();
     return;
   }
@@ -625,7 +1137,9 @@ async function commit(forceAll) {
   if (!result) return;
 
   els.message.value = "";
+  autosizeMessage();
   applyState(result.state);
+  loadHistory();
   const sha = result.commit?.shortSha ? `${result.commit.shortSha} ` : "";
   toast(`已提交 ${sha}${result.commit?.subject || ""}`.trim(), "success");
   if (result.pushOutput !== null && result.pushOutput !== undefined) {
@@ -633,12 +1147,86 @@ async function commit(forceAll) {
   }
 }
 
-async function generateMessage() {
-  const result = await withBusy("generate", () => invoke("git.generateMessage"));
-  if (!result) return;
-  els.message.value = result.message;
+// The composer grows with its content, but never past a readable size; the
+// cap is also bounded by the panel so the lists above keep usable height.
+function autosizeMessage() {
+  const el = els.message;
+  const styles = getComputedStyle(el);
+  const lineHeight = parseFloat(styles.lineHeight) || 18;
+  const padding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+  const borders = parseFloat(styles.borderTopWidth) + parseFloat(styles.borderBottomWidth);
+  const minHeight = Math.round(lineHeight * 3 + padding + borders);
+  const maxHeight = Math.max(
+    minHeight,
+    Math.round(
+      Math.min(lineHeight * MESSAGE_MAX_ROWS + padding + borders, window.innerHeight * 0.42),
+    ),
+  );
+  el.style.height = "auto";
+  const content = el.scrollHeight + borders;
+  el.style.height = `${Math.min(Math.max(content, minHeight), maxHeight)}px`;
+  el.style.overflowY = content > maxHeight ? "auto" : "hidden";
+}
+
+/** Abort an in-flight typewriter fill and release the pending promise. */
+function stopMessageStream() {
+  const stream = messageStream;
+  if (!stream) return;
+  messageStream = null;
+  cancelAnimationFrame(stream.raf);
+  stream.resolve();
+}
+
+/**
+ * Write the generated message character by character so the reasoning trail is
+ * visible and the composer grows as lines arrive. Resolves when finished or
+ * cancelled; prefers-reduced-motion fills in one go.
+ */
+function streamMessage(text) {
+  stopMessageStream();
+  const value = String(text || "");
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  if (!value || reduceMotion) {
+    els.message.value = value;
+    autosizeMessage();
+    return Promise.resolve();
+  }
+
+  els.message.value = "";
+  autosizeMessage();
   els.message.focus();
-  els.message.setSelectionRange(result.message.length, result.message.length);
+
+  return new Promise((resolve) => {
+    const chars = Array.from(value);
+    const duration = Math.min(1100, Math.max(320, chars.length * 12));
+    const started = performance.now();
+    const stream = { raf: 0, resolve };
+    messageStream = stream;
+
+    const tick = (now) => {
+      if (messageStream !== stream) return;
+      const progress = Math.min(1, (now - started) / duration);
+      els.message.value = chars.slice(0, Math.round(chars.length * progress)).join("");
+      autosizeMessage();
+      if (progress < 1) {
+        stream.raf = requestAnimationFrame(tick);
+        return;
+      }
+      messageStream = null;
+      els.message.setSelectionRange(chars.length, chars.length);
+      resolve();
+    };
+    stream.raf = requestAnimationFrame(tick);
+  });
+}
+
+async function generateMessage() {
+  const result = await withBusy("generate", async () => {
+    const generated = await invoke("git.generateMessage");
+    await streamMessage(generated && generated.message);
+    return generated;
+  });
+  if (!result) return;
   toast(
     result.basedOn === "staged" ? "已根据已暂存的改动生成提交信息" : "已根据全部改动生成提交信息",
     "success",
@@ -649,6 +1237,7 @@ async function pull() {
   const result = await withBusy("pull", () => invoke("git.pull"));
   if (!result) return;
   applyState(result.state);
+  loadHistory();
   toast(firstLine(result.output) || "已是最新", "success");
 }
 
@@ -656,6 +1245,7 @@ async function push() {
   const result = await withBusy("push", () => invoke("git.push"));
   if (!result) return;
   applyState(result.state);
+  loadHistory();
   toast(firstLine(result.output) || "已推送", "success");
 }
 
@@ -680,6 +1270,41 @@ function bindEvents() {
   els.commitBtn.addEventListener("click", () => commit(undefined));
   els.genBtn.addEventListener("click", generateMessage);
 
+  // User edits win over a running typewriter fill.
+  els.message.addEventListener("input", () => {
+    stopMessageStream();
+    autosizeMessage();
+  });
+
+  // Same for the history header: the whole strip collapses, minus its actions.
+  els.historyHead.addEventListener("click", (event) => {
+    if (event.target.closest(".group-actions")) return;
+    state.history.collapsed = !state.history.collapsed;
+    renderHistory();
+  });
+  els.historyMore.addEventListener("click", loadMoreHistory);
+
+  els.commits.addEventListener("click", (event) => {
+    const file = event.target.closest(".commit-file");
+    if (file) {
+      event.stopPropagation();
+      openCommitDiff(file.dataset.sha, file.dataset.path);
+      return;
+    }
+    const row = event.target.closest(".commit-line");
+    if (!row) return;
+    const item = row.closest(".commit");
+    if (item) toggleCommit(item.dataset.sha);
+  });
+
+  els.commits.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const target = event.target.closest(".commit-line, .commit-file");
+    if (!target) return;
+    event.preventDefault();
+    target.click();
+  });
+
   els.commitMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleMenu();
@@ -700,7 +1325,11 @@ function bindEvents() {
   els.lists.addEventListener("click", (event) => {
     const row = event.target.closest(".file");
     const action = event.target.closest("[data-act]");
-    const toggle = event.target.closest("[data-toggle]");
+    // The whole group header toggles collapse, but its own actions must not.
+    const toggle = event.target.closest(".group-actions")
+      ? null
+      : event.target.closest(".group-head")?.querySelector("[data-toggle]") ||
+        event.target.closest("[data-toggle]");
 
     if (action) {
       event.stopPropagation();
@@ -744,6 +1373,11 @@ function bindEvents() {
   els.sheetBack.addEventListener("click", () => closeSheet(false));
   els.sheetClose.addEventListener("click", () => closeSheet(false));
 
+  els.diffClose.addEventListener("click", () => closeDiffPane());
+  els.splitter.addEventListener("pointerdown", onSplitterDown);
+  els.splitter.addEventListener("dblclick", () => setDiffWidth(splitBounds().total / 2));
+  els.splitter.addEventListener("keydown", onSplitterKey);
+
   els.sheetFoot.addEventListener("click", (event) => {
     const button = event.target.closest("[data-answer]");
     if (!button) return;
@@ -760,6 +1394,11 @@ function bindEvents() {
         closeSheet(false);
         return;
       }
+      // The diff is a pane, not a dialog: Esc closes it before anything else.
+      if (state.diff.open) {
+        closeDiffPane();
+        return;
+      }
       closeMenu();
       return;
     }
@@ -770,18 +1409,23 @@ function bindEvents() {
     }
   });
 
-  els.message.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.shiftKey) return;
-    const withMod = IS_MAC ? event.metaKey : event.ctrlKey;
-    if (!withMod) return;
-    event.preventDefault();
-    commit(undefined);
-  });
+  // ⌘/Ctrl + Enter from the composer reaches the document handler above; a
+  // second handler here would fire the commit twice for one keystroke.
 }
 
 async function init() {
+  autosizeMessage();
   bindEvents();
   applyAppearance(null);
+  renderHistory();
+
+  if (typeof ResizeObserver === "function") {
+    // The host can resize the work panel at any time: keep the stored width legal.
+    const observer = new ResizeObserver(() => {
+      if (state.diff.open) setDiffWidth(state.diff.width || splitBounds().total / 2);
+    });
+    observer.observe(els.split);
+  }
 
   if (window.pluginBridge?.on) {
     window.pluginBridge.on("appearance:changed", applyAppearance);

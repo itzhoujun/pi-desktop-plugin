@@ -4,9 +4,10 @@
  * Git Workbench — git runner and parsers.
  *
  * Safety rails
- * - Every git call is spawn("git", ["-C", repoRoot, ...args]): an argument
- *   array, never a shell string, so a crafted path or ref cannot become a
- *   command.
+ * - Every git call is spawn("git", ["-c", "core.quotePath=false", "-C",
+ *   repoRoot, ...args]): an argument array, never a shell string, so a crafted
+ *   path or ref cannot become a command. quotePath=false keeps non-ASCII
+ *   (e.g. Chinese) paths readable instead of C-style octal escapes.
  * - Paths and branch names are validated before they reach git.
  * - GIT_TERMINAL_PROMPT=0 and GIT_EDITOR=true keep git from blocking a
  *   detached plugin process on credentials or an editor.
@@ -21,6 +22,8 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const NETWORK_TIMEOUT_MS = 120_000;
 const MAX_BUFFER = 32 * 1024 * 1024;
 const MAX_STDERR = 256 * 1024;
+/* A commit body is only shown in the expanded property table. */
+const MAX_BODY_CHARS = 2000;
 
 function gitEnv() {
   return {
@@ -77,7 +80,8 @@ function runGit(repoRoot, args, options = {}) {
     let stderr = "";
     let timer = null;
 
-    const child = spawn("git", ["-C", repoRoot, ...args], {
+    // quotePath=false: keep 中文/emoji paths as UTF-8 instead of \351\235… escapes.
+    const child = spawn("git", ["-c", "core.quotePath=false", "-C", repoRoot, ...args], {
       env: gitEnv(),
       windowsHide: true,
       stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
@@ -183,10 +187,91 @@ function isSafeBranchName(name) {
   if (name.includes("..") || name.includes("@{")) return false;
   return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name);
 }
+/**
+ * A commit-ish this plugin is willing to hand to git as one argument.
+ * Callers only ever get here with a sha the plugin itself printed.
+ */
+function isSafeSha(value) {
+  return typeof value === "string" && /^[0-9a-f]{7,40}$/i.test(value);
+}
 
 // ---------------------------------------------------------------------------
 // parsers
 // ---------------------------------------------------------------------------
+
+const C_ESCAPES = {
+  a: "\x07",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+  v: "\v",
+  '"': '"',
+  "\\": "\\",
+};
+
+/**
+ * git wraps paths it considers "unusual" in double quotes — including
+ * non-ASCII names even with core.quotePath=false (`"新增 笔记.md"`). Strip the
+ * wrapper and decode the remaining C escapes so the panel shows the real name.
+ */
+function unquotePath(value) {
+  const text = String(value || "");
+  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"')) return text;
+
+  const body = text.slice(1, -1);
+  const bytes = [];
+  let out = "";
+  const flush = () => {
+    if (bytes.length === 0) return;
+    out += Buffer.from(bytes.splice(0, bytes.length)).toString("utf8");
+  };
+
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+    if (ch !== "\\") {
+      flush();
+      out += ch;
+      continue;
+    }
+    const octal = /^[0-7]{1,3}/.exec(body.slice(i + 1));
+    if (octal) {
+      bytes.push(parseInt(octal[0], 8));
+      i += octal[0].length;
+      continue;
+    }
+    const escaped = body[i + 1];
+    if (escaped === undefined) {
+      flush();
+      out += "\\";
+      break;
+    }
+    flush();
+    out += C_ESCAPES[escaped] ?? escaped;
+    i += 1;
+  }
+  flush();
+  return out;
+}
+
+/** Index of the ` -> ` rename separator that is not inside a quoted path. */
+function renameArrowIndex(text) {
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quoted && ch === "\\") {
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && ch === " " && text.startsWith(" -> ", i)) return i;
+  }
+  return -1;
+}
 
 function parseStatusPorcelain(output) {
   const result = {
@@ -226,10 +311,12 @@ function parseStatusPorcelain(output) {
     const y = line[1];
     let pathPart = line.slice(3);
     let origPath = null;
-    const arrow = pathPart.indexOf(" -> ");
+    const arrow = renameArrowIndex(pathPart);
     if (arrow !== -1) {
-      origPath = pathPart.slice(0, arrow);
-      pathPart = pathPart.slice(arrow + 4);
+      origPath = unquotePath(pathPart.slice(0, arrow));
+      pathPart = unquotePath(pathPart.slice(arrow + 4));
+    } else {
+      pathPart = unquotePath(pathPart);
     }
     result.entries.push({ x, y, path: pathPart, origPath });
   }
@@ -278,6 +365,12 @@ function buildFileGroups(status) {
   return { staged, changes, stagedTruncated, changesTruncated };
 }
 
+/**
+ * Parse a NUL/unit-separator delimited `git log` run.
+ * - "subjects": `%s` per record
+ * - "history" : `%H %h %s %an %aI %cn %cI %p %b` per record
+ * - legacy    : `%h %s %ad`
+ */
 function parseLogRecords(output, format) {
   const records = [];
   for (const part of String(output || "").split("\x1e")) {
@@ -288,10 +381,47 @@ function parseLogRecords(output, format) {
       records.push({ subject: fields[0] || "" });
       continue;
     }
+    if (format === "history") {
+      if (fields.length < 9) continue;
+      records.push({
+        sha: fields[0],
+        shortSha: fields[1],
+        subject: fields[2],
+        author: fields[3],
+        authorDate: fields[4],
+        committer: fields[5],
+        commitDate: fields[6],
+        parents: fields[7]
+          .split(" ")
+          .map((sha) => sha.trim())
+          .filter(Boolean),
+        body: fields[8] || "",
+      });
+      continue;
+    }
     if (fields.length < 3) continue;
     records.push({ shortSha: fields[0], subject: fields[1], authorDate: fields[2] });
   }
   return records;
+}
+
+/** `git show --name-status` rows → [{ letter, path, origPath }]. */
+function parseNameStatus(output) {
+  const files = [];
+  for (const line of String(output || "").split("\n")) {
+    const row = line.trim();
+    if (!row) continue;
+    const parts = row.split("\t");
+    if (parts.length < 2) continue;
+    const letter = parts[0].trim()[0];
+    if (!letter) continue;
+    if ((letter === "R" || letter === "C") && parts.length >= 3) {
+      files.push({ letter, path: unquotePath(parts[2]), origPath: unquotePath(parts[1]) });
+      continue;
+    }
+    files.push({ letter, path: unquotePath(parts[1]), origPath: null });
+  }
+  return files;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +478,59 @@ async function recentSubjects(root, count = 8) {
   return parseLogRecords(stdout, "subjects")
     .map((record) => record.subject.trim())
     .filter(Boolean);
+}
+
+/**
+ * The most recent commits, newest first, with the properties the panel shows
+ * for each one. `body` is capped so a long commit message cannot bloat the
+ * payload; the subject is what the collapsed row displays.
+ */
+async function log(root, limit = 30) {
+  const count = Math.min(Math.max(Number(limit) || 30, 1), 200);
+  if (!(await hasCommits(root))) return [];
+  const { stdout } = await runGit(root, [
+    "log",
+    "-n",
+    String(count),
+    "--no-color",
+    "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%cn%x1f%cI%x1f%p%x1f%b%x1e",
+  ]);
+  return parseLogRecords(stdout, "history").map((record) => ({
+    ...record,
+    subject: record.subject.trim(),
+    body: record.body.trim().slice(0, MAX_BODY_CHARS),
+  }));
+}
+
+/** Files a single commit touched, with their status letters. */
+async function commitFiles(root, sha) {
+  if (!isSafeSha(sha)) throw gitError("提交 ID 不合法", { code: "INVALID_ARGUMENT" });
+  const { stdout } = await runGit(root, [
+    "show",
+    "--name-status",
+    "--find-renames",
+    "--no-color",
+    "--format=",
+    sha,
+  ]);
+  return parseNameStatus(stdout);
+}
+
+/** The patch of one file inside one commit. */
+async function commitDiff(root, sha, filePath) {
+  if (!isSafeSha(sha)) throw gitError("提交 ID 不合法", { code: "INVALID_ARGUMENT" });
+  if (!isSafeRelativePath(filePath)) throw gitError("文件路径不合法", { code: "INVALID_ARGUMENT" });
+  const { stdout } = await runGit(root, [
+    "show",
+    "--no-color",
+    "--no-ext-diff",
+    "--find-renames",
+    "--format=",
+    sha,
+    "--",
+    filePath,
+  ]);
+  return stdout;
 }
 
 // ---------------------------------------------------------------------------
@@ -504,12 +687,18 @@ module.exports = {
   resolveRepoRoot,
   isSafeRelativePath,
   isSafeBranchName,
+  isSafeSha,
+  unquotePath,
   parseStatusPorcelain,
   buildFileGroups,
   parseLogRecords,
+  parseNameStatus,
   status,
   headCommit,
   recentSubjects,
+  log,
+  commitFiles,
+  commitDiff,
   fileDiff,
   diffForCommit,
   diffStat,

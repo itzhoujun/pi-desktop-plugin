@@ -30,6 +30,31 @@
           </span>
           <span class="repo-name" id="repoName"></span>
           <span class="spacer"></span>
+          <span class="sync-count" id="syncCount" hidden></span>
+          <button class="icon-btn" id="pullBtn" title="拉取（git pull）" aria-label="拉取">
+            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+              <path
+                d="M8 2.5v8M8 11l-3-3M8 11l3-3M3.5 13.5h9"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <button class="icon-btn" id="pushBtn" title="推送（git push）" aria-label="推送">
+            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+              <path
+                d="M8 13V5M8 5l-3 3M8 5l3 3M3.5 2.5h9"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
           <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新">
             <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
               <path
@@ -43,92 +68,169 @@
             </svg>
           </button>
         </div>
-        <div class="sync-line">
-          <span class="sync-count" id="syncCount" hidden></span>
-          <button class="ghost-btn" id="pullBtn" title="git pull（合并方式）">
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path
-                d="M8 2.5v8M8 11l-3-3M8 11l3-3M3.5 13.5h9"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            拉取
-          </button>
-          <button class="ghost-btn" id="pushBtn" title="git push">
-            推送
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path
-                d="M8 13V5M8 5l-3 3M8 5l3 3M3.5 2.5h9"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
       </header>
 
-      <section class="composer">
-        <div class="editor">
-          <textarea
-            id="message"
-            rows="3"
-            spellcheck="false"
-            aria-label="提交信息"
-            placeholder="消息"
-          ></textarea>
-          <button class="gen-btn" id="genBtn" title="用 AI 生成提交信息" aria-label="用 AI 生成提交信息">
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path
-                d="M7.2 2.2 8 4.4l2.2.8L8 6l-.8 2.2L6.4 6l-2.2-.8L6.4 4.4 7.2 2.2Zm4.6 6.6.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5.5-1.3ZM4.4 9.6l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6L2.2 12l1.6-.6.6-1.6Z"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-        </div>
-        <div class="commit-row">
-          <button class="commit-btn" id="commitBtn">
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path
-                d="M3 8.6 6.2 12 13 4.6"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span id="commitLabel">提交</span>
-          </button>
-          <button class="commit-split" id="commitMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-label="更多提交选项">
-            <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path d="m4.5 6.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-        </div>
-        <div class="menu" id="commitMenu" role="menu" hidden>
-          <button class="menu-item" data-menu="commit-staged" role="menuitem">仅提交已暂存</button>
-          <button class="menu-item" data-menu="commit-all" role="menuitem">提交全部更改</button>
-          <div class="menu-sep"></div>
-          <label class="menu-check"><input type="checkbox" id="optPush" /> 提交后立即推送</label>
-          <label class="menu-check"><input type="checkbox" id="optSignoff" /> 添加 Signed-off-by</label>
-        </div>
-      </section>
+      <!-- Two columns: the work panel on the left, the selected diff on the
+           right. The splitter between them drags the diff width. -->
+      <div class="split" id="split">
+        <div class="pane pane-main" id="paneMain">
+          <section class="composer">
+            <div class="editor">
+              <textarea
+                id="message"
+                rows="3"
+                spellcheck="false"
+                aria-label="提交信息"
+                placeholder="消息"
+              ></textarea>
+              <button
+                class="gen-btn"
+                id="genBtn"
+                title="用 AI 生成提交信息"
+                aria-label="用 AI 生成提交信息"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                  <path
+                    d="M2.5 13.5 7.6 8.4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M10.9 1.8 12 4.2l2.4 1.1L12 6.4l-1.1 2.4-1.1-2.4-2.4-1.1L9.8 4.2Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M4.1 2.6 4.6 4l1.4.5-1.4.5-.5 1.4-.5-1.4L2.2 4.5 3.6 4Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="commit-row">
+              <button class="commit-btn" id="commitBtn">
+                <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                  <path
+                    d="M3 8.6 6.2 12 13 4.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span id="commitLabel">提交</span>
+              </button>
+              <button
+                class="commit-split"
+                id="commitMenuBtn"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-label="更多提交选项"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                  <path
+                    d="m4.5 6.5 3.5 3.5 3.5-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="menu" id="commitMenu" role="menu" hidden>
+              <button class="menu-item" data-menu="commit-staged" role="menuitem">仅提交已暂存</button>
+              <button class="menu-item" data-menu="commit-all" role="menuitem">提交全部更改</button>
+              <div class="menu-sep"></div>
+              <label class="menu-check"><input type="checkbox" id="optPush" /> 提交后立即推送</label>
+              <label class="menu-check"><input type="checkbox" id="optSignoff" /> 添加 Signed-off-by</label>
+            </div>
+          </section>
 
-      <div class="banner" id="banner" hidden></div>
+          <div class="banner" id="banner" hidden></div>
 
-      <main class="lists" id="lists" aria-live="polite"></main>
+          <main class="lists" id="lists" aria-live="polite"></main>
 
-      <footer class="statusbar">
-        <span class="status-repo" id="statusRepo"></span>
-        <span class="status-last" id="statusLast"></span>
-      </footer>
+          <section class="history" id="history" aria-label="提交历史">
+            <header class="history-head" id="historyHead">
+              <button
+                class="collapse"
+                id="historyToggle"
+                data-collapsed="false"
+                aria-expanded="true"
+                aria-label="折叠或展开提交历史"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                  <path
+                    d="m4.5 6.5 3.5 3.5 3.5-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <h2>提交历史</h2>
+              <span class="count" id="historyCount" hidden></span>
+              <div class="group-actions">
+                <button class="mini" id="historyMore" hidden title="加载更多提交" aria-label="加载更多提交">
+                  <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                    <circle cx="3.4" cy="8" r="1.15" fill="currentColor" />
+                    <circle cx="8" cy="8" r="1.15" fill="currentColor" />
+                    <circle cx="12.6" cy="8" r="1.15" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
+            </header>
+            <div class="history-body" id="historyBody">
+              <ol class="commits" id="commits"></ol>
+              <div class="history-empty" id="historyEmpty" hidden></div>
+            </div>
+          </section>
+
+          <footer class="statusbar">
+            <span class="status-repo" id="statusRepo"></span>
+            <span class="status-last" id="statusLast"></span>
+          </footer>
+        </div>
+
+        <div
+          class="splitter"
+          id="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整差异面板宽度（双击恢复一半）"
+          aria-valuemin="180"
+          tabindex="0"
+          hidden
+        ></div>
+
+        <section class="pane pane-diff" id="diffPane" aria-label="文件差异" hidden>
+          <header class="diff-head">
+            <div class="diff-titles">
+              <div class="diff-title" id="diffTitle"></div>
+              <div class="diff-sub" id="diffSub" hidden></div>
+            </div>
+            <span class="diff-stat" id="diffStat" hidden></span>
+            <button class="icon-btn" id="diffClose" title="关闭差异（Esc）" aria-label="关闭差异">
+              <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
+                <path
+                  d="m4 4 8 8M12 4l-8 8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </header>
+          <div class="diff-body" id="diffBody"></div>
+        </section>
+      </div>
     </div>
 
     <div class="overlay" id="overlay" hidden>
@@ -136,7 +238,14 @@
         <header class="sheet-head">
           <button class="icon-btn" id="sheetBack" aria-label="返回">
             <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              <path
+                d="M10 3 5 8l5 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
           </button>
           <div class="sheet-titles">
@@ -145,7 +254,13 @@
           </div>
           <button class="icon-btn" id="sheetClose" aria-label="关闭">
             <svg viewBox="0 0 16 16" aria-hidden="true" class="ico">
-              <path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+              <path
+                d="m4 4 8 8M12 4l-8 8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
             </svg>
           </button>
         </header>
