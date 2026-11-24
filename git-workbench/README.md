@@ -29,6 +29,16 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 - `themes.list` 可枚举已注册的插件主题；`themes.*` 与 `ui.theme` 权限用于主题本身，本插件不申请。
 - 调色板默认值就是宿主暗/浅主题的真实取值（`--bg #181818` / `--bg-soft #212121` / `--field #0d0d0d` / `--border rgba(255,255,255,.08)`；浅色 `#fff` / `#f9f9f9` / `--border rgba(26,28,31,.12)`），所以不装插件主题时和客户端一致。整行贴边、0 圆角；圆角只留给控件（`--radius-sm`(8) / `--radius`(11) / `--radius-pill`，`--radius-lg`(16) 仅确认对话框）。
 
+## 多语言
+
+插件不自己保存语言，而是用宿主的语言设置：面板通过 `pluginBridge.invoke("app.getAppearance")` 拿到 `locale`（主进程侧对应 `pi.app.getLocale()` / 会话的 `locale`），并用 `appearance:changed` 事件跟随用户切换。
+
+- 判定规则：`locale` 以 `zh` 开头 → 中文；其余（`en-US`、`ja-JP`、`fr` …）→ 英文。所以非中文用户看到的是英文，而不是中英混排。
+- 文案集中在 `renderer/panel.js` 的 `STRINGS`（`zh` / `en` 两份，键同名，`{0}`/`{1}` 为占位符），取用一律走 `t("key", ...)`；静态标记用 `data-i18n` / `data-i18n-title` / `data-i18n-aria` / `data-i18n-placeholder` 挂接，`applyStaticStrings()` 在启动和语言变化时统一刷新。
+- 语言变化时 `setLanguage()` 会重绘顶栏、文件列表与提交历史；相对时间由 `Intl.RelativeTimeFormat` 按 `zh-CN` / `en` 生成，不再写死。
+- 主进程侧同样的文案放在 `main.js` 的 `TEXT`（`en` / `"zh-CN"`），错误码 → 文案的映射在面板的 `err.*` 键，命令名用 `title(en, zh)`。
+- 新增文案时请同时补 `zh` 与 `en`，并跑 `node` 自检脚本确认没有缺键（`/^err\\.[A-Z]/` 的键由运行时错误码拼接）。
+
 ## 权限
 
 | 权限 | 用途 |

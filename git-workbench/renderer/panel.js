@@ -164,22 +164,270 @@ const FILE_TYPES = {
   txt: ["TXT", "#7a7a7a"],
 };
 
-const ERRORS = {
-  NO_WORKSPACE: "请先打开一个项目文件夹。",
-  NOT_A_REPO: "当前文件夹不是 git 仓库。",
-  NOTHING_TO_COMMIT: "没有可提交的改动。",
-  NO_MODEL: "请先在「设置 → 模型」中配置一个模型。",
-  EMPTY_COMPLETION: "模型没有返回内容，请重试。",
-  PROVIDER_UNAUTHORIZED: "模型未授权，请检查该服务在设置中的密钥。",
-  PROVIDER_RATE_LIMITED: "模型服务限流，请稍后重试。",
-  RATE_LIMITED: "操作太频繁，请稍后重试。",
-  TIMEOUT: "操作超时，请稍后重试。",
-  GIT_MISSING: "找不到 git，请确认已安装并已加入 PATH。",
-  NO_REMOTE: "仓库没有配置远端。",
-  DETACHED_HEAD: "当前处于游离 HEAD 状态，请先切换分支。",
-  PERMISSION_DENIED: "权限不足：请在插件页面授予所需权限后重新加载。",
-  INVALID_ARGUMENT: "参数不合法。",
+/* --------------------------------------------------------------------- i18n */
+
+/*
+ * The host owns the language: `app.getAppearance()` reports its locale and
+ * `appearance:changed` fires when the user switches. Anything that is not
+ * Chinese falls back to English, so a French or Japanese host gets English
+ * instead of mixed text.
+ */
+
+const STRINGS = {
+  zh: {
+    "app.title": "Git Workbench",
+    "time.now": "刚刚",
+    "head.detached": "游离 HEAD",
+    "head.unknown": "（未知）",
+    "composer.hint": "消息({0}Enter 在“{1}”提交)",
+    "composer.placeholder": "消息",
+    "summary.counts": "{0} 个已暂存 · {1} 个未暂存",
+    "banner.conflict": "存在未解决的合并冲突：解决冲突并暂存文件后再提交。",
+    "commit.label": "提交",
+    "commit.busy": "提交中…",
+    "commit.root": "（根提交）",
+    "commit.noSubject": "（无提交说明）",
+    "commit.origPath": "原路径 {0}",
+    "commit.filesLoading": "读取改动文件…",
+    "commit.filesEmpty": "该提交没有文件改动。",
+    "empty.title": "尚未打开项目",
+    "empty.notRepo": "当前文件夹不是 git 仓库",
+    "empty.body": "在 PI-Desktop 中打开一个 git 仓库所在的文件夹，然后返回这里。",
+    "group.staged": "已暂存",
+    "group.changes": "更改",
+    "group.empty.staged": "没有已暂存的更改",
+    "group.empty.changes": "没有未提交的更改",
+    "collapse.aria": "折叠或展开{0}",
+    "act.stage": "暂存",
+    "act.unstage": "取消暂存",
+    "act.discard": "放弃更改",
+    "act.stageAll": "暂存全部更改",
+    "act.unstageAll": "全部取消暂存",
+    "act.discardAll": "放弃全部更改",
+    "prop.commit": "提交",
+    "prop.author": "作者",
+    "prop.authorDate": "作者时间",
+    "prop.commitDate": "提交时间",
+    "prop.parents": "父提交",
+    "prop.body": "说明",
+    "history.title": "提交历史",
+    "history.collapse": "折叠或展开提交历史",
+    "history.more": "加载更多提交",
+    "history.empty": "此仓库还没有提交记录。",
+    "history.loading": "读取提交历史…",
+    "diff.commitSub": "{0} · 提交差异",
+    "diff.staged": "已暂存",
+    "diff.worktree": "工作区",
+    "diff.untracked": "未跟踪文件",
+    "diff.conflict": "存在冲突",
+    "patch.loading": "读取差异…",
+    "patch.empty": "没有可显示的差异。",
+    "patch.emptyUntracked": "该未跟踪文件没有可显示的文本差异。",
+    "patch.emptyCommitFile": "该提交对这个文件没有可显示的文本差异。",
+    "patch.truncated": "已截断：仅显示前 {0} 行（共 {1} 行）。",
+    "confirm.cancel": "取消",
+    "discard.title": "放弃更改",
+    "discard.body": "放弃 {0} 的本地改动？此操作不可撤销。",
+    "discard.files": "这 {0} 个文件",
+    "toast.discarded": "已放弃更改",
+    "toast.needMessage": "请先填写提交信息，或点右上角的 AI 按钮让模型写一条。",
+    "toast.committed": "已提交 {0}",
+    "toast.pushed": "已推送到远端",
+    "toast.pushedShort": "已推送",
+    "toast.upToDate": "已是最新",
+    "gen.basedStaged": "已根据已暂存的改动生成提交信息",
+    "gen.basedAll": "已根据全部改动生成提交信息",
+    "err.generic": "操作失败。",
+    "err.bridge": "pluginBridge 不可用：请在 PI-Desktop 面板中打开此页面。",
+    "err.NO_WORKSPACE": "请先打开一个项目文件夹。",
+    "err.NOT_A_REPO": "当前文件夹不是 git 仓库。",
+    "err.NOTHING_TO_COMMIT": "没有可提交的改动。",
+    "err.NO_MODEL": "请先在「设置 → 模型」中配置一个模型。",
+    "err.EMPTY_COMPLETION": "模型没有返回内容，请重试。",
+    "err.PROVIDER_UNAUTHORIZED": "模型未授权，请检查该服务在设置中的密钥。",
+    "err.PROVIDER_RATE_LIMITED": "模型服务限流，请稍后重试。",
+    "err.RATE_LIMITED": "操作太频繁，请稍后重试。",
+    "err.TIMEOUT": "操作超时，请稍后重试。",
+    "err.GIT_MISSING": "找不到 git，请确认已安装并已加入 PATH。",
+    "err.NO_REMOTE": "仓库没有配置远端。",
+    "err.DETACHED_HEAD": "当前处于游离 HEAD 状态，请先切换分支。",
+    "err.PERMISSION_DENIED": "权限不足：请在插件页面授予所需权限后重新加载。",
+    "err.INVALID_ARGUMENT": "参数不合法。",
+    "html.branch": "当前分支",
+    "html.pull": "拉取",
+    "html.pullTip": "拉取（git pull）",
+    "html.push": "推送",
+    "html.pushTip": "推送（git push）",
+    "html.refresh": "刷新",
+    "html.message": "提交信息",
+    "html.ai": "用 AI 生成提交信息",
+    "html.commit": "提交",
+    "html.more": "更多提交选项",
+    "html.menuStaged": "仅提交已暂存",
+    "html.menuAll": "提交全部更改",
+    "html.menuPush": "提交后立即推送",
+    "html.menuSignoff": "添加 Signed-off-by",
+    "html.splitter": "调整差异面板宽度（双击恢复一半）",
+    "html.diff": "文件差异",
+    "html.diffClose": "关闭差异（Esc）",
+    "html.back": "返回",
+    "html.close": "关闭",
+  },
+  en: {
+    "app.title": "Git Workbench",
+    "time.now": "just now",
+    "head.detached": "detached HEAD",
+    "head.unknown": "(unknown)",
+    "composer.hint": "Message ({0}Enter commits to \"{1}\")",
+    "composer.placeholder": "Message",
+    "summary.counts": "{0} staged · {1} unstaged",
+    "banner.conflict": "Unresolved merge conflicts: resolve them and stage the files before committing.",
+    "commit.label": "Commit",
+    "commit.busy": "Committing…",
+    "commit.root": "(root commit)",
+    "commit.noSubject": "(no commit message)",
+    "commit.origPath": "was {0}",
+    "commit.filesLoading": "Reading changed files…",
+    "commit.filesEmpty": "This commit changes no files.",
+    "empty.title": "No project open",
+    "empty.notRepo": "Not a git repository",
+    "empty.body": "Open a folder that contains a git repository in PI-Desktop, then come back here.",
+    "group.staged": "Staged",
+    "group.changes": "Changes",
+    "group.empty.staged": "No staged changes",
+    "group.empty.changes": "No uncommitted changes",
+    "collapse.aria": "Collapse or expand {0}",
+    "act.stage": "Stage",
+    "act.unstage": "Unstage",
+    "act.discard": "Discard changes",
+    "act.stageAll": "Stage all changes",
+    "act.unstageAll": "Unstage all",
+    "act.discardAll": "Discard all changes",
+    "prop.commit": "Commit",
+    "prop.author": "Author",
+    "prop.authorDate": "Authored",
+    "prop.commitDate": "Committed",
+    "prop.parents": "Parents",
+    "prop.body": "Message",
+    "history.title": "Commit history",
+    "history.collapse": "Collapse or expand commit history",
+    "history.more": "Load more commits",
+    "history.empty": "No commits in this repository yet.",
+    "history.loading": "Reading commit history…",
+    "diff.commitSub": "{0} · commit diff",
+    "diff.staged": "Staged",
+    "diff.worktree": "Working tree",
+    "diff.untracked": "Untracked file",
+    "diff.conflict": "Conflict",
+    "patch.loading": "Reading diff…",
+    "patch.empty": "No diff to show.",
+    "patch.emptyUntracked": "No textual diff for this untracked file.",
+    "patch.emptyCommitFile": "No textual diff for this file in this commit.",
+    "patch.truncated": "Truncated: showing the first {0} of {1} lines.",
+    "confirm.cancel": "Cancel",
+    "discard.title": "Discard changes",
+    "discard.body": "Discard local changes in {0}? This cannot be undone.",
+    "discard.files": "these {0} files",
+    "toast.discarded": "Changes discarded",
+    "toast.needMessage": "Write a commit message first, or use the AI button at the top right.",
+    "toast.committed": "Committed {0}",
+    "toast.pushed": "Pushed to remote",
+    "toast.pushedShort": "Pushed",
+    "toast.upToDate": "Already up to date",
+    "gen.basedStaged": "Generated from the staged changes",
+    "gen.basedAll": "Generated from all changes",
+    "err.generic": "Something went wrong.",
+    "err.bridge": "pluginBridge unavailable: open this page inside a PI-Desktop panel.",
+    "err.NO_WORKSPACE": "Open a project folder first.",
+    "err.NOT_A_REPO": "This folder is not a git repository.",
+    "err.NOTHING_TO_COMMIT": "Nothing to commit.",
+    "err.NO_MODEL": "Configure a model in Settings → Models first.",
+    "err.EMPTY_COMPLETION": "The model returned nothing. Try again.",
+    "err.PROVIDER_UNAUTHORIZED": "Model not authorized. Check the service key in Settings.",
+    "err.PROVIDER_RATE_LIMITED": "The model service is rate limiting. Try again later.",
+    "err.RATE_LIMITED": "Too many requests. Try again later.",
+    "err.TIMEOUT": "The operation timed out. Try again.",
+    "err.GIT_MISSING": "git not found. Make sure it is installed and on PATH.",
+    "err.NO_REMOTE": "This repository has no remote configured.",
+    "err.DETACHED_HEAD": "HEAD is detached. Switch to a branch first.",
+    "err.PERMISSION_DENIED": "Permission denied. Grant the permission on the Plugins page and reload.",
+    "err.INVALID_ARGUMENT": "Invalid argument.",
+    "html.branch": "Current branch",
+    "html.pull": "Pull",
+    "html.pullTip": "Pull (git pull)",
+    "html.push": "Push",
+    "html.pushTip": "Push (git push)",
+    "html.refresh": "Refresh",
+    "html.message": "Commit message",
+    "html.ai": "Generate the commit message with AI",
+    "html.commit": "Commit",
+    "html.more": "More commit options",
+    "html.menuStaged": "Commit staged only",
+    "html.menuAll": "Commit all changes",
+    "html.menuPush": "Push after committing",
+    "html.menuSignoff": "Add Signed-off-by",
+    "html.splitter": "Resize the diff pane (double-click to reset)",
+    "html.diff": "File diff",
+    "html.diffClose": "Close the diff (Esc)",
+    "html.back": "Back",
+    "html.close": "Close",
+  },
 };
+
+const ERROR_CODES = new Set(
+  Object.keys(STRINGS.zh)
+    .filter((key) => /^err\.[A-Z]/.test(key))
+    .map((key) => key.slice(4)),
+);
+
+let UI_LANG = "zh";
+let languageApplied = false;
+
+function t(key, ...args) {
+  const table = STRINGS[UI_LANG] || STRINGS.zh;
+  const text = table[key] ?? STRINGS.zh[key] ?? key;
+  return args.length
+    ? args.reduce((out, arg, index) => out.split(`{${index}}`).join(String(arg)), text)
+    : text;
+}
+
+/** Static markup carries data-i18n* hooks so it follows the same table. */
+function applyStaticStrings() {
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-title]")) {
+    node.title = t(node.dataset.i18nTitle);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-aria]")) {
+    node.setAttribute("aria-label", t(node.dataset.i18nAria));
+  }
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  }
+}
+
+function makeRelativeTime() {
+  return typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function"
+    ? new Intl.RelativeTimeFormat(UI_LANG === "zh" ? "zh-CN" : "en", { numeric: "auto" })
+    : null;
+}
+
+function setLanguage(locale) {
+  const next = typeof locale === "string" && /^zh\b/i.test(locale) ? "zh" : "en";
+  const changed = languageApplied && next !== UI_LANG;
+  UI_LANG = next;
+  RELATIVE_TIME = makeRelativeTime();
+  document.documentElement.lang = typeof locale === "string" && locale ? locale : next;
+  document.title = t("app.title");
+  applyStaticStrings();
+  if (changed) {
+    renderHeader();
+    renderLists();
+    renderHistory();
+  }
+  languageApplied = true;
+}
 
 // --------------------------------------------------------------------- utils
 
@@ -203,7 +451,7 @@ function escapeHtml(value) {
 function bridge() {
   const api = window.pluginBridge;
   if (!api || typeof api.invoke !== "function") {
-    throw Object.assign(new Error("pluginBridge 不可用：请在 PI-Desktop 面板中打开此页面。"), {
+    throw Object.assign(new Error(t("err.bridge")), {
       code: "NO_BRIDGE",
     });
   }
@@ -221,9 +469,9 @@ function errorText(error) {
     error?.code ||
     (raw.match(/^([A-Z][A-Z0-9_]{2,}):/) || [])[1] ||
     "";
-  if (ERRORS[code]) return ERRORS[code];
+  if (ERROR_CODES.has(code)) return t(`err.${code}`);
   const cleaned = raw.replace(/^[A-Z][A-Z0-9_]{2,}:\s*/, "").trim();
-  return cleaned || "操作失败。";
+  return cleaned || t("err.generic");
 }
 
 function fileBadge(filePath) {
@@ -256,10 +504,7 @@ function firstLine(text, limit = 220) {
  * applyState()'s signature check, so staging files does not repaint it.
  */
 
-const RELATIVE_TIME =
-  typeof Intl !== "undefined" && typeof Intl.RelativeTimeFormat === "function"
-    ? new Intl.RelativeTimeFormat("zh-CN", { numeric: "auto" })
-    : null;
+let RELATIVE_TIME = makeRelativeTime();
 
 const TIME_UNITS = [
   ["year", 365 * 24 * 3600],
@@ -284,13 +529,13 @@ function absoluteTime(iso) {
   )}:${pad(date.getMinutes())}`;
 }
 
-/** "3 天前" style; falls back to the absolute date when Intl is unavailable. */
+/** "3 days ago" style, localised via Intl.RelativeTimeFormat for the UI language. */
 function relativeTime(iso) {
   const time = parseTime(iso);
   if (time === null) return "";
   const seconds = (time - Date.now()) / 1000;
   const abs = Math.abs(seconds);
-  if (abs < 45) return "刚刚";
+  if (abs < 45) return t("time.now");
   for (const [unit, size] of TIME_UNITS) {
     if (abs < size && unit !== "minute") continue;
     const value = Math.round(seconds / size);
@@ -425,9 +670,7 @@ function applyAppearance(appearance) {
         ? "light"
         : "dark";
   applyThemeTokens(appearance);
-  if (typeof appearance?.locale === "string" && appearance.locale) {
-    document.documentElement.lang = appearance.locale;
-  }
+  setLanguage(appearance?.locale);
 }
 
 // ------------------------------------------------------------------- rendering
@@ -468,7 +711,7 @@ function applyState(data, options = {}) {
 function renderHeader() {
   const data = state.data;
   const hasRepo = Boolean(data && data.repo);
-  const branch = hasRepo ? (data.detached ? "游离 HEAD" : data.branch || "（未知）") : "—";
+  const branch = hasRepo ? (data.detached ? t("head.detached") : data.branch || t("head.unknown")) : "—";
 
   els.branchName.textContent = branch;
   els.repoName.textContent = hasRepo
@@ -477,8 +720,8 @@ function renderHeader() {
   els.repoName.title = hasRepo ? data.repo.root : "";
 
   els.message.placeholder = hasRepo
-    ? `消息(${MOD_KEY}Enter 在“${branch}”提交)`
-    : "消息";
+    ? t("composer.hint", MOD_KEY, branch)
+    : t("composer.placeholder");
 
   const tracking = [];
   if (hasRepo && data.ahead > 0) tracking.push(`↑${data.ahead}`);
@@ -488,7 +731,7 @@ function renderHeader() {
 
   const totals = data?.counts || { staged: 0, changes: 0, total: 0 };
   els.statusRepo.textContent = hasRepo
-    ? `${totals.staged} 个已暂存 · ${totals.changes} 个未暂存`
+    ? t("summary.counts", totals.staged, totals.changes)
     : "";
   els.statusLast.textContent = hasRepo && data.lastCommit
     ? `${data.lastCommit.shortSha} ${data.lastCommit.subject}`
@@ -496,7 +739,7 @@ function renderHeader() {
   els.statusLast.title = els.statusLast.textContent;
 
   if (data?.hasConflicts) {
-    showBanner("存在未解决的合并冲突：解决冲突并暂存文件后再提交。", "error");
+    showBanner(t("banner.conflict"), "error");
   } else {
     showBanner("");
   }
@@ -518,7 +761,7 @@ function refreshButtons() {
   els.genBtn.disabled = busy || !hasRepo || !dirty;
   els.genBtn.dataset.busy = state.busy === "generate" ? "true" : "false";
 
-  els.commitLabel.textContent = state.busy === "commit" ? "提交中…" : "提交";
+  els.commitLabel.textContent = state.busy === "commit" ? t("commit.busy") : t("commit.label");
   els.pullBtn.dataset.busy = state.busy === "pull" ? "true" : "false";
   els.pushBtn.dataset.busy = state.busy === "push" ? "true" : "false";
 }
@@ -527,38 +770,38 @@ function renderLists() {
   const data = state.data;
 
   if (!data || !data.repo) {
-    const title = data?.reason === "NOT_A_REPO" ? "当前文件夹不是 git 仓库" : "尚未打开项目";
-    els.lists.innerHTML = `<div class="empty"><strong>${title}</strong>在 PI-Desktop 中打开一个 git 仓库所在的文件夹，然后返回这里。</div>`;
+    const title = data?.reason === "NOT_A_REPO" ? t("empty.notRepo") : t("empty.title");
+    els.lists.innerHTML = `<div class="empty"><strong>${title}</strong> ${t("empty.body")}</div>`;
     return;
   }
 
   const parts = [];
   if (data.staged.length > 0) {
-    parts.push(groupHtml("staged", "已暂存", data.staged, true));
+    parts.push(groupHtml("staged", t("group.staged"), data.staged, true));
   }
-  parts.push(groupHtml("changes", "更改", data.changes, false));
+  parts.push(groupHtml("changes", t("group.changes"), data.changes, false));
   els.lists.innerHTML = parts.join("");
 }
 
 function groupHtml(key, title, entries, staged) {
   const collapsed = state.collapsed[key];
   const actions = staged
-    ? `<button class="mini" data-act="unstage-all" title="全部取消暂存" aria-label="全部取消暂存">−</button>`
-    : `<button class="mini" data-act="stage-all" title="暂存全部更改" aria-label="暂存全部更改">＋</button>` +
-      `<button class="mini" data-act="discard-all" title="放弃全部更改" aria-label="放弃全部更改">${DISCARD}</button>`;
+    ? `<button class="mini" data-act="unstage-all" title="${t("act.unstageAll")}" aria-label="${t("act.unstageAll")}">−</button>`
+    : `<button class="mini" data-act="stage-all" title="${t("act.stageAll")}" aria-label="${t("act.stageAll")}">＋</button>` +
+      `<button class="mini" data-act="discard-all" title="${t("act.discardAll")}" aria-label="${t("act.discardAll")}">${DISCARD}</button>`;
   const rows = entries.map((entry) => fileRow(entry, staged)).join("");
   const body = collapsed
     ? ""
     : `<ul class="files">${
         rows ||
         `<li class="empty">${
-          key === "changes" ? "没有未提交的更改" : "没有已暂存的更改"
+        key === "changes" ? t("group.empty.changes") : t("group.empty.staged")
         }</li>`
       }</ul>`;
 
   return `<section class="group">
     <header class="group-head">
-      <button class="collapse" data-toggle="${key}" data-collapsed="${collapsed}" aria-expanded="${!collapsed}" aria-label="折叠或展开${title}">${CHEVRON}</button>
+      <button class="collapse" data-toggle="${key}" data-collapsed="${collapsed}" aria-expanded="${!collapsed}" aria-label="${t("collapse.aria", title)}">${CHEVRON}</button>
       <h2>${title}</h2>
       ${entries.length > 0 ? `<span class="count">${entries.length}</span>` : ""}
       <div class="group-actions">${actions}</div>
@@ -572,11 +815,11 @@ function fileRow(entry, staged) {
   const { name, dir } = splitPath(entry.path);
   const path = escapeHtml(entry.path);
   const actions = staged
-    ? `<button class="mini" data-act="unstage" data-path="${path}" title="取消暂存" aria-label="取消暂存">−</button>`
-    : `<button class="mini" data-act="stage" data-path="${path}" title="暂存" aria-label="暂存">＋</button>` +
+    ? `<button class="mini" data-act="unstage" data-path="${path}" title="${t("act.unstage")}" aria-label="${t("act.unstage")}">−</button>`
+    : `<button class="mini" data-act="stage" data-path="${path}" title="${t("act.stage")}" aria-label="${t("act.stage")}">＋</button>` +
       (entry.conflict
         ? ""
-        : `<button class="mini" data-act="discard" data-path="${path}" title="放弃更改" aria-label="放弃更改">${DISCARD}</button>`);
+        : `<button class="mini" data-act="discard" data-path="${path}" title="${t("act.discard")}" aria-label="${t("act.discard")}">${DISCARD}</button>`);
 
   return `<li class="file" data-path="${path}" data-staged="${staged ? "1" : "0"}" data-untracked="${
     entry.untracked ? "1" : "0"
@@ -607,24 +850,24 @@ function resetHistory() {
 function commitPropsHtml(commit) {
   const parents = commit.parents.length
     ? commit.parents.map((sha) => `<span class="mono">${escapeHtml(sha.slice(0, 7))}</span>`).join(" ")
-    : "（根提交）";
+    : t("commit.root");
   const committer =
     commit.committer && commit.committer !== commit.author
       ? `<span class="props-rel">${escapeHtml(commit.committer)}</span>`
       : "";
   const rows = [
-    ["提交", `<span class="mono">${escapeHtml(commit.sha)}</span>`],
-    ["作者", escapeHtml(commit.author)],
+    [t("prop.commit"), `<span class="mono">${escapeHtml(commit.sha)}</span>`],
+    [t("prop.author"), escapeHtml(commit.author)],
     [
-      "作者时间",
+      t("prop.authorDate"),
       `${escapeHtml(absoluteTime(commit.authorDate))}<span class="props-rel">${escapeHtml(
         relativeTime(commit.authorDate),
       )}</span>`,
     ],
-    ["提交时间", `${escapeHtml(absoluteTime(commit.commitDate))}${committer}`],
-    ["父提交", parents],
+    [t("prop.commitDate"), `${escapeHtml(absoluteTime(commit.commitDate))}${committer}`],
+    [t("prop.parents"), parents],
   ];
-  if (commit.body) rows.push(["说明", `<span class="props-body">${escapeHtml(commit.body)}</span>`]);
+  if (commit.body) rows.push([t("prop.body"), `<span class="props-body">${escapeHtml(commit.body)}</span>`]);
 
   return `<dl class="props">${rows
     .map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`)
@@ -642,7 +885,7 @@ function commitFileRow(sha, file) {
     }</span>
     ${
       file.origPath
-        ? `<span class="corig" title="原路径 ${escapeHtml(file.origPath)}">← ${escapeHtml(file.origPath)}</span>`
+        ? `<span class="corig" title="${t("commit.origPath", escapeHtml(file.origPath))}">← ${escapeHtml(file.origPath)}</span>`
         : ""
     }
     <span class="fstat stat-${escapeHtml(file.letter)}">${escapeHtml(file.letter)}</span>
@@ -651,9 +894,9 @@ function commitFileRow(sha, file) {
 
 function commitFilesHtml(sha) {
   const entry = state.history.files.get(sha);
-  if (!entry) return `<div class="commit-files-note">读取改动文件…</div>`;
+  if (!entry) return `<div class="commit-files-note">${t("commit.filesLoading")}</div>`;
   if (entry.error) return `<div class="commit-files-note">${escapeHtml(entry.error)}</div>`;
-  if (entry.files.length === 0) return `<div class="commit-files-note">该提交没有文件改动。</div>`;
+  if (entry.files.length === 0) return `<div class="commit-files-note">${t("commit.filesEmpty")}</div>`;
   return `<ul class="commit-files">${entry.files
     .map((file) => commitFileRow(sha, file))
     .join("")}</ul>`;
@@ -661,7 +904,7 @@ function commitFilesHtml(sha) {
 
 function commitRowHtml(commit) {
   const expanded = state.history.expanded === commit.sha;
-  const subject = commit.subject || "（无提交说明）";
+  const subject = commit.subject || t("commit.noSubject");
   const title = `${subject} — ${commit.author} · ${absoluteTime(commit.authorDate)}`;
   return `<li class="commit" data-sha="${escapeHtml(commit.sha)}" data-expanded="${expanded ? "1" : "0"}">
     <div class="commit-line" role="button" tabindex="0" aria-expanded="${expanded}" title="${escapeHtml(title)}">
@@ -703,7 +946,7 @@ function renderHistory() {
   }
   els.historyEmpty.hidden = false;
   els.historyEmpty.textContent =
-    history.error || (history.loaded ? "此仓库还没有提交记录。" : "读取提交历史…");
+    history.error || (history.loaded ? t("history.empty") : t("history.loading"));
 }
 
 async function loadHistory(options = {}) {
@@ -784,12 +1027,12 @@ function openCommitDiff(sha, filePath) {
   const token = beginDiff({ path: filePath, sha });
   openDiffPane({
     title: filePath,
-    sub: `${short} · 提交差异`,
-    body: `<div class="patch-note">读取差异…</div>`,
+    sub: t("diff.commitSub", short),
+    body: `<div class="patch-note">${t("patch.loading")}</div>`,
   });
 
   return invoke("git.commitDiff", { sha, path: filePath }).then(
-    (result) => showPatch(token, result?.patch, `<div class="patch-note">该提交对这个文件没有可显示的文本差异。</div>`),
+    (result) => showPatch(token, result?.patch, `<div class="patch-note">${t("patch.emptyCommitFile")}</div>`),
     (error) => {
       if (state.diff.token !== token) return;
       els.diffBody.innerHTML = `<div class="patch-note">${escapeHtml(errorText(error))}</div>`;
@@ -962,7 +1205,7 @@ function confirmAction(title, bodyHtml, confirmLabel) {
       title,
       sub: "",
       body: `<div class="confirm-body">${bodyHtml}</div>`,
-      footer: `<button class="btn" data-answer="0">取消</button><button class="btn btn-danger" data-answer="1">${escapeHtml(
+      footer: `<button class="btn" data-answer="0">${t("confirm.cancel")}</button><button class="btn btn-danger" data-answer="1">${escapeHtml(
         confirmLabel,
       )}</button>`,
       mode: "confirm",
@@ -1006,7 +1249,7 @@ function patchHtml(patch) {
 
   const note =
     lines.length > LIMIT
-      ? `<div class="patch-note">已截断：仅显示前 ${LIMIT} 行（共 ${lines.length} 行）。</div>`
+      ? `<div class="patch-note">${t("patch.truncated", LIMIT, lines.length)}</div>`
       : "";
 
   return `<pre class="patch">${body}</pre>${note}`;
@@ -1016,23 +1259,23 @@ async function openDiff(filePath, staged) {
   const token = beginDiff({ path: filePath, staged });
   openDiffPane({
     title: filePath,
-    sub: staged ? "已暂存" : "工作区",
-    body: `<div class="patch-note">读取差异…</div>`,
+    sub: staged ? t("diff.staged") : t("diff.worktree"),
+    body: `<div class="patch-note">${t("patch.loading")}</div>`,
   });
 
   try {
     const result = await invoke("git.diff", { path: filePath, staged });
     if (state.diff.token !== token) return;
-    const sub = [staged ? "已暂存" : "工作区"];
-    if (result.untracked) sub.push("未跟踪文件");
-    if (result.conflict) sub.push("存在冲突");
+    const sub = [staged ? t("diff.staged") : t("diff.worktree")];
+    if (result.untracked) sub.push(t("diff.untracked"));
+    if (result.conflict) sub.push(t("diff.conflict"));
     els.diffSub.textContent = sub.join(" · ");
     els.diffSub.hidden = false;
     showPatch(
       token,
       result.patch,
       `<div class="patch-note">${
-        result.untracked ? "该未跟踪文件没有可显示的文本差异。" : "没有可显示的差异。"
+        result.untracked ? t("patch.emptyUntracked") : t("patch.empty")
       }</div>`,
     );
   } catch (error) {
@@ -1095,17 +1338,17 @@ async function discardPaths(paths) {
   const what =
     paths.length === 1
       ? `<code>${escapeHtml(paths[0])}</code>`
-      : `这 ${paths.length} 个文件`;
+      : t("discard.files", paths.length);
   const ok = await confirmAction(
-    "放弃更改",
-    `放弃 ${what} 的本地改动？此操作不可撤销。`,
-    "放弃更改",
+    t("discard.title"),
+    t("discard.body", what),
+    t("discard.title"),
   );
   if (!ok) return;
   const result = await withBusy("discard", () => invoke("git.discard", { paths }));
   if (result) {
     applyState(result.state);
-    toast("已放弃更改", "success");
+  toast(t("toast.discarded"), "success");
   }
 }
 
@@ -1114,12 +1357,12 @@ async function commit(forceAll) {
   if (!data || !data.repo) return;
   const message = els.message.value.trim();
   if (!message) {
-    toast("请先填写提交信息，或点右上角的 AI 按钮让模型写一条。", "error");
+    toast(t("toast.needMessage"), "error");
     els.message.focus();
     return;
   }
   if (!data.counts || data.counts.total === 0) {
-    toast("没有可提交的改动。", "error");
+  toast(t("err.NOTHING_TO_COMMIT"), "error");
     return;
   }
 
@@ -1141,9 +1384,9 @@ async function commit(forceAll) {
   applyState(result.state);
   loadHistory();
   const sha = result.commit?.shortSha ? `${result.commit.shortSha} ` : "";
-  toast(`已提交 ${sha}${result.commit?.subject || ""}`.trim(), "success");
+  toast(`${t("toast.committed", sha)}${result.commit?.subject || ""}`.trim(), "success");
   if (result.pushOutput !== null && result.pushOutput !== undefined) {
-    toast(firstLine(result.pushOutput) || "已推送到远端", "success");
+    toast(firstLine(result.pushOutput) || t("toast.pushed"), "success");
   }
 }
 
@@ -1228,7 +1471,7 @@ async function generateMessage() {
   });
   if (!result) return;
   toast(
-    result.basedOn === "staged" ? "已根据已暂存的改动生成提交信息" : "已根据全部改动生成提交信息",
+    result.basedOn === "staged" ? t("gen.basedStaged") : t("gen.basedAll"),
     "success",
   );
 }
@@ -1238,7 +1481,7 @@ async function pull() {
   if (!result) return;
   applyState(result.state);
   loadHistory();
-  toast(firstLine(result.output) || "已是最新", "success");
+  toast(firstLine(result.output) || t("toast.upToDate"), "success");
 }
 
 async function push() {
@@ -1246,7 +1489,7 @@ async function push() {
   if (!result) return;
   applyState(result.state);
   loadHistory();
-  toast(firstLine(result.output) || "已推送", "success");
+  toast(firstLine(result.output) || t("toast.pushedShort"), "success");
 }
 
 // ---------------------------------------------------------------------- events

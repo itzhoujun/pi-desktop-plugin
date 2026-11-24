@@ -39,12 +39,26 @@ const TEXT = {
     notARepo: "The open folder is not a git repository.",
     nothingToCommit: "There are no changes to commit.",
     noModel: "Configure a model in Settings → Models first.",
+    generateFailed: "Could not generate the commit message: {0}",
+    unknownError: "unknown error",
+    emptyCompletion: "The model returned nothing. Try again.",
+    notInChanges: "{0} is not part of the current changes.",
+    openPanel: "Open the work panel from a conversation first",
+    upToDate: "Already up to date",
+    pushed: "Pushed",
   },
   "zh-CN": {
     noWorkspace: "请先打开一个项目文件夹。",
     notARepo: "当前文件夹不是 git 仓库。",
     nothingToCommit: "没有可提交的改动。",
     noModel: "请先在“设置 → 模型”中配置一个模型。",
+    generateFailed: "生成提交信息失败：{0}",
+    unknownError: "未知错误",
+    emptyCompletion: "模型没有返回内容，请重试。",
+    notInChanges: "{0} 不在当前改动中。",
+    openPanel: "请先在对话中打开右侧工作面板",
+    upToDate: "已是最新",
+    pushed: "已推送",
   },
 };
 
@@ -269,11 +283,12 @@ async function generateMessage() {
     });
   } catch (error) {
     const code = error?.errorCode || error?.code || "AGENT_FAILED";
-    throw fail(code, `生成提交信息失败：${error?.message || "未知错误"}`);
+    const text = await strings();
+    throw fail(code, text.generateFailed.replace("{0}", error?.message || text.unknownError));
   }
 
   const message = cleanCompletion(completion?.text);
-  if (!message) throw fail("EMPTY_COMPLETION", "模型没有返回内容，请重试。");
+  if (!message) throw fail("EMPTY_COMPLETION", (await strings()).emptyCompletion);
 
   return {
     ok: true,
@@ -328,7 +343,7 @@ async function onPanelInvoke(channel, payload) {
         groups.changes.find((item) => item.path === filePath) ||
         groups.staged.find((item) => item.path === filePath) ||
         null;
-      if (!entry) throw fail("NOT_FOUND", `${filePath} 不在当前改动中。`);
+      if (!entry) throw fail("NOT_FOUND", (await strings()).notInChanges.replace("{0}", filePath));
       const result = await git.fileDiff(root, filePath, Boolean(input.staged), entry);
       return {
         ok: true,
@@ -428,7 +443,8 @@ async function registerCommands() {
       try {
         await pi.ui.revealView({ viewId: "changes" });
       } catch (error) {
-        await pi.ui.showToast(error?.message || "请先在对话中打开右侧工作面板").catch(() => {});
+        const fallback = (await strings()).openPanel;
+        await pi.ui.showToast(error?.message || fallback).catch(() => {});
       }
     },
   });
@@ -440,7 +456,7 @@ async function registerCommands() {
     run: async () => {
       const { root } = await repoContext();
       const result = await git.pull(root);
-      await pi.ui.showToast(result.output || "已是最新").catch(() => {});
+      await pi.ui.showToast(result.output || (await strings()).upToDate).catch(() => {});
       await pi.ui.revealView({ viewId: "changes" }).catch(() => {});
     },
   });
@@ -452,7 +468,7 @@ async function registerCommands() {
     run: async () => {
       const { root } = await repoContext();
       const result = await git.push(root);
-      await pi.ui.showToast(result.output || "已推送").catch(() => {});
+      await pi.ui.showToast(result.output || (await strings()).pushed).catch(() => {});
     },
   });
 }
