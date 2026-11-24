@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "local.git-workbench",
   "name": "Git Workbench",
-  "version": "0.2.4",
+  "version": "0.1.0",
   "description": "Keep Git in the PI-Desktop work panel: review changed files, stage or discard them, write or let the model generate the commit message, then commit, pull and push — plus a commit history at the bottom of the panel with the properties, changed files and diff of any commit, without leaving the app.",
   "i18n": {
     "en": {
