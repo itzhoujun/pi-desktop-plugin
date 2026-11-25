@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "local.git-workbench",
   "name": "Git Workbench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Keep Git in the PI-Desktop work panel: review changed files, stage or discard them, write or let the model generate the commit message, then commit, pull and push — plus a commit history at the bottom of the panel with the properties, changed files and diff of any commit, without leaving the app.",
   "i18n": {
     "en": {
@@ -16,7 +16,7 @@
   },
   "author": "PI-Desktop",
   "categories": ["developer-tools"],
-  "safetyNotes": "Runs the system git binary against the repository root resolved from the open workspace, always with an argument array (no shell) and GIT_TERMINAL_PROMPT=0. Commit messages are written over stdin. The one-shot completion only receives the diff of the changes being committed, not the chat transcript, and never receives credentials. Push and pull use the user's existing git remote and credentials.",
+  "safetyNotes": "Runs the system git binary against the repository root resolved from the open workspace, always with an argument array (no shell) and GIT_TERMINAL_PROMPT=0. Commit messages are written over stdin. The one-shot completion only receives the diff of the changes being committed, not the chat transcript, and never receives credentials. Push and pull use the user's existing git remote and credentials. Before a push the plugin may read the SSH host keys of the remote with ssh-keyscan/ssh-keygen and, only after the user confirms the displayed SHA256 fingerprints, append exactly those keys to ~/.ssh/known_hosts (0600, directory 0700). It never reads private keys and changes no other file under ~/.ssh.",
   "main": "main.js",
   "contributes": {
     "views": [

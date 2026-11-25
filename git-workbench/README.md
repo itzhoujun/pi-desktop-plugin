@@ -3,10 +3,19 @@
 PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或生成提交信息、提交、拉取、推送，都在右侧面板完成；面板底部还有可折叠的提交历史，点开任一条即可看到它的属性、改动文件与差异。不打开终端，也不离开应用。
 
 - 插件 ID：`local.git-workbench`（`local.` 为本地/私有命名空间；如需强调归属可改成反向域形式，例如 `io.github.<user>.git-workbench`）
-- 版本：`0.1.0`　最低宿主版本：PI-Desktop `>=0.8.0`（`manifest.engines.piDesktop`）
+- 版本：`0.2.0`　最低宿主版本：PI-Desktop `>=0.8.0`（`manifest.engines.piDesktop`）
 - 类型：工作面板视图（`ui.view`），无 Agent 工具、无设置项、无常驻后台服务
 - 许可证：[MIT](LICENSE)　变更日志：[CHANGELOG.md](CHANGELOG.md)
 
+## 推送前的确认
+
+刚加好远端、第一次推送时，git 往往会直接失败：`fatal: The current branch main has no upstream branch.` 或 `Host key verification failed.`。面板把这两步变成显式确认，而不是让用户去终端补命令：
+
+1. 点「推送」或执行 `git-workbench.push` 时先跑预检：读当前分支、上游、ahead/behind、所有远端（地址已脱敏）与 SSH 主机指纹状态。
+2. 只有**需要确认**时才弹窗：当前分支没有上游（或上游已被删除）、主机密钥不在 `known_hosts`、或无法检查主机密钥。已关联上游且主机可信时保持零摩擦，直接推送。
+3. 弹窗里可以改远端（下拉列出全部远端及其地址）、改远端分支名，并逐条勾选要信任的主机指纹（默认全选，可取消）；主机名、端口、密钥类型与完整指纹都原样展示，方便与托管方公布的指纹逐字核对。
+4. 确认后先写入指纹（仅勾选的、且与重新扫描结果一致的那几条），再执行 `git push <remote> <branch>`；需要建立上游时加 `--set-upstream`，远端分支名与本地不同时用 `local:remote` refspec。
+5. 推送仍失败时，面板按 git 的错误分类给出可操作提示：`HOST_KEY_UNKNOWN`、`HOST_KEY_CHANGED`、`AUTH_FAILED`、`NO_UPSTREAM`、`NON_FAST_FORWARD`、`REPO_NOT_FOUND`、`NETWORK` 等，其余归为通用失败并保留原始 stderr 摘要。
 ## 功能
 
 | 区域 | 能力 |
@@ -26,7 +35,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 | --- | --- | --- |
 | `git-workbench.open` | Git Workbench: Open | 打开/聚焦右侧 Git 工作面板；插件激活时也会自动显示该视图 |
 | `git-workbench.pull` | Git Workbench: Pull | 对当前仓库执行 `git pull --no-rebase --no-edit`，面板会同步刷新 |
-| `git-workbench.push` | Git Workbench: Push | 有上游时 `git push`，否则 `git push -u <remote> <branch>` |
+| `git-workbench.push` | Git Workbench: Push | 需要确认（无上游 / 主机指纹未知）时提示到面板确认；否则直接推送 |
 
 ## 设置与工具
 
@@ -54,6 +63,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 - **系统 git 可执行文件**：插件用 `spawn("git", [...])` 直接调用用户机器上的 git，没有内置 git 实现；git 不在 `PATH` 中时面板显示 `git 不可用` 类错误。
 - **用户已配置的模型服务**：仅通过宿主的 `pi.agent.complete` 间接调用，插件自身不发起任何 HTTP/WebSocket 请求，也没有 `net.*` 权限。
 - **远端仓库与凭据**：拉取/推送使用用户已有的 git remote 与 git 自身凭据（SSH key、credential helper）。插件不读取、不存储、不转发任何凭据，并把 `GIT_TERMINAL_PROMPT=0` 等变量设进子进程环境，避免卡在交互式输入。
+- **OpenSSH 工具**：推送前的指纹确认调用系统的 `ssh`（解析 `ssh_config` 中的主机别名与端口）、`ssh-keyscan`（读取主机公钥）、`ssh-keygen -F`（查询 `known_hosts`）。缺失时面板降级为「无法检查主机指纹」，推送仍交给 git。用户在弹窗里确认后，插件把**被勾选的那几条**主机公钥追加进 `~/.ssh/known_hosts`（文件 0600、目录 0700），这是插件唯一写入的用户文件，且只发生在用户点「确认并推送」之后。
 - 除上面两项外，插件不连接任何第三方服务，不上报任何数据。
 
 ## 主题适配
@@ -89,7 +99,9 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 | `git.discard` | `{ paths }`：已跟踪文件 `git restore`，未跟踪或新加文件 `git clean` |
 | `git.commit` | `{ message, stageAll?, push?, signOff?, amend? }`，信息经 stdin 传给 `git commit -F -` |
 | `git.pull` | `git pull --no-rebase --no-edit` |
-| `git.push` | 有上游直接 `git push`，否则 `git push -u <remote> <branch>` |
+| `git.push` | `{ remote?, branch?, setUpstream? }` → 按确认结果推送（不同远端分支名用 `local:remote` refspec）；不带参数时保持旧行为：有上游 `git push`，否则 `git push -u <remote> <branch>` |
+| `git.pushPreflight` | 无参数 → `{ branch, upstream, needsUpstream, remote, remoteBranch, remoteUrl, remotes }` 与 ssh 检查结果 `{ supported, known, host, port, knownHostsFile, keys[] }`；远端地址中的 userinfo 已脱敏 |
+| `git.trustSshHost` | `{ remote, fingerprints[] }` → 重扫主机公钥，只写入与这些 `SHA256:` 指纹匹配的键；指纹对不上返回 `HOST_KEY_CHANGED`，不写入任何内容 |
 | `git.generateMessage` | 用默认模型生成提交信息 |
 
 ## 安全设计
@@ -100,6 +112,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 - 设置 `GIT_TERMINAL_PROMPT=0`、`GIT_EDITOR=true`、`GIT_MERGE_AUTOEDIT=no`，避免插件进程卡在凭据输入或编辑器上。
 - 放弃更改是不可撤销操作，面板内先弹确认，且冲突文件不提供放弃入口。
 - 提交历史只读：`git log` / `git show` 不接受任何写操作；提交 ID 按 `[0-9a-f]{7,40}` 校验，查看某提交里的文件 diff 时路径仍走仓库相对路径校验。
+- 主机指纹先展示后写入：`git.pushPreflight` 只读取并计算 `SHA256:` 指纹，弹窗把主机、端口、密钥类型与完整指纹一起列出，用户逐条勾选后才调 `git.trustSshHost`；该通道会重新扫描一次，只写入与确认过的指纹**完全一致**的键，展示与重扫不一致时整批拒绝。插件不读取私钥，也不改 `~/.ssh` 下的其它文件。
 
 ## 安装
 
@@ -115,6 +128,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 manifest.json          # 身份、视图/命令贡献、权限、i18n
 main.js                # 生命周期、onPanelInvoke 通道、LLM 提交信息
 git.js                 # git 执行层与 porcelain 解析器
+ssh.js                 # SSH 远端解析、known_hosts 查询、主机指纹扫描与信任写入
 renderer/index.html    # 视图页面
 renderer/panel.css     # 主题变量与布局
 renderer/panel.js      # 交互逻辑、i18n、历史与 diff

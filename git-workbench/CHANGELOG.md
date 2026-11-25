@@ -2,10 +2,32 @@
 
 本文件记录 Git Workbench 的用户可见变更，格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-02-24
+
+推送不再因为「没有上游」或「主机密钥未确认」直接失败，改为在面板里确认后再推。
+
+### 新增
+
+- 推送预检：点「推送」先读当前分支、上游、ahead/behind、全部远端（地址已脱敏）与 SSH 主机指纹状态；只有需要确认时才弹窗，已关联上游且主机可信时仍是一键推送。
+- 推送确认弹窗：可改远端（下拉列出全部远端及地址）、改远端分支名、查看 `本地分支 → 远端/分支`，并看到「是否设置上游」的说明；确认后按 `git push <remote> <branch>`（需要时 `--set-upstream`，远端分支名不同时用 `local:remote` refspec）执行。
+- SSH 主机指纹确认：主机密钥不在 `known_hosts` 时，列出主机、端口、密钥类型与完整 `SHA256:` 指纹（默认全选、可逐条取消），用户核对后只把勾选且与重新扫描结果一致的键写入 `~/.ssh/known_hosts`（文件 0600、目录 0700）；扫描结果与展示不一致时整批拒绝，返回 `HOST_KEY_CHANGED`。
+- 新的面板通道：`git.pushPreflight`、`git.trustSshHost`；`git.push` 接受 `{ remote, branch, setUpstream }`。
+- 新增 `ssh.js`：远端 URL 解析（`ssh://`、`git+ssh://`、scp 风格）、`ssh -G` 解析主机别名/端口、`ssh-keygen -F` 查询 `known_hosts`、`ssh-keyscan` 读键、自算指纹与信任写入。
+
+### 改进
+
+- git 失败按 stderr 分类：`HOST_KEY_UNKNOWN`、`HOST_KEY_CHANGED`、`AUTH_FAILED`、`NO_UPSTREAM`、`NON_FAST_FORWARD`、`REPO_NOT_FOUND`、`NETWORK`、`GIT_FAILED`，面板据此给出可操作提示，不再只显示一段英文 fatal。
+- 「提交后立即推送」失败时提交仍然保留：面板单独报推送错误（`pushError`），不再把整个提交动作报成失败。
+- 命令面板的 `git-workbench.push` 在需要确认时提示并打开面板，不再直接抛出 git 错误。
+
+### 安全
+
+- 指纹先展示后写入，写入走独立通道并重新扫描比对；插件不读私钥、不改 `~/.ssh` 下其它文件。
+- 新增的 `ssh` / `ssh-keygen` / `ssh-keyscan` 调用同样使用参数数组，不经 shell；主机名与端口来自远端 URL 并做字符校验。
+
 ## [0.1.0] - 2026-02-24
 
 首个公开版本。
-
 ### 新增
 
 - 右侧 Git 工作面板：当前分支、仓库名、`↑ahead ↓behind`，顶栏内置拉取、推送、刷新。

@@ -7,7 +7,8 @@
  * View      : work-panel view "changes" (contributes.views)
  * Channels  : git.state / git.log / git.diff / git.commitFiles / git.commitDiff /
  *             git.stage / git.unstage / git.stageAll / git.unstageAll /
- *             git.discard / git.commit / git.pull / git.push / git.generateMessage
+ *             git.discard / git.commit / git.pull / git.push / git.generateMessage /
+ *             git.pushPreflight / git.trustSshHost
  *
  * Design notes
  * - All git access lives in ./git.js: spawn("git", [...]) with argument
@@ -46,6 +47,8 @@ const TEXT = {
     openPanel: "Open the work panel from a conversation first",
     upToDate: "Already up to date",
     pushed: "Pushed",
+    pushNeedsConfirm: "Confirm the remote and the SSH host key in the Git panel first.",
+    pushFailed: "Push failed: {0}",
   },
   "zh-CN": {
     noWorkspace: "请先打开一个项目文件夹。",
@@ -59,6 +62,8 @@ const TEXT = {
     openPanel: "请先在对话中打开右侧工作面板",
     upToDate: "已是最新",
     pushed: "已推送",
+    pushNeedsConfirm: "请先在 Git 面板中确认远端与 SSH 主机指纹。",
+    pushFailed: "推送失败：{0}",
   },
 };
 
@@ -117,6 +122,36 @@ function requireSha(payload) {
     throw fail("INVALID_ARGUMENT", `Not a commit id: ${sha}`);
   }
   return sha;
+}
+
+const SAFE_REMOTE = /^[A-Za-z0-9._-]{1,120}$/;
+const FINGERPRINT = /^SHA256:[A-Za-z0-9+/]{40,50}={0,2}$/;
+
+/** A remote name the panel read from `git remote`; never interpolated into a shell. */
+function requireRemoteName(payload) {
+  const remote = String(payload?.remote ?? "").trim();
+  if (!SAFE_REMOTE.test(remote) || remote === "." || remote === "..") {
+    throw fail("INVALID_ARGUMENT", `Not a remote name: ${remote}`);
+  }
+  return remote;
+}
+
+/** Only the fingerprints the user was shown and approved reach the ssh helper. */
+function requireFingerprints(payload) {
+  const list = Array.isArray(payload?.fingerprints) ? payload.fingerprints : [];
+  if (list.length === 0) {
+    throw fail("INVALID_ARGUMENT", "No host key fingerprint was confirmed.");
+  }
+  if (list.length > 16) {
+    throw fail("INVALID_ARGUMENT", "Too many host keys in one call.");
+  }
+  return list.map((entry) => {
+    const value = String(entry ?? "").trim();
+    if (!FINGERPRINT.test(value)) {
+      throw fail("INVALID_ARGUMENT", `Not a SHA256 host key fingerprint: ${value}`);
+    }
+    return value;
+  });
 }
 
 async function repoContext() {
@@ -395,14 +430,24 @@ async function onPanelInvoke(channel, payload) {
         amend: input.amend === true,
       });
       let pushOutput = null;
+      let pushError = null;
       if (input.push === true) {
-        pushOutput = (await git.push(root)).output;
+        try {
+          pushOutput = (await git.push(root)).output;
+        } catch (error) {
+          /* The commit itself landed; the panel decides how to finish the push. */
+          pushError = {
+            code: error?.code || "GIT_FAILED",
+            message: error?.message || String(error),
+          };
+        }
       }
       return {
         ok: true,
         output: result.output,
         commit: result.commit,
         pushOutput,
+        pushError,
         state: await readState(),
       };
     }
@@ -413,10 +458,40 @@ async function onPanelInvoke(channel, payload) {
       return { ok: true, output: result.output, branch: result.branch, state: await readState() };
     }
 
+    case "git.pushPreflight": {
+      const { root } = await repoContext();
+      return { ok: true, plan: await git.pushPreflight(root) };
+    }
+
+    case "git.trustSshHost": {
+      const { root } = await repoContext();
+      const remote = requireRemoteName(input);
+      const fingerprints = requireFingerprints(input);
+      const url = await git.remotePushUrl(root, remote);
+      const result = await git.trustHostKey(url, fingerprints);
+      return { ok: true, remote, ...result };
+    }
+
     case "git.push": {
       const { root } = await repoContext();
-      const result = await git.push(root);
-      return { ok: true, output: result.output, state: await readState() };
+      const remote = input.remote ? requireRemoteName(input) : undefined;
+      const branch = input.branch ? String(input.branch) : undefined;
+      if (branch && !git.isSafeBranchName(branch)) {
+        throw fail("INVALID_ARGUMENT", `Not a branch name: ${branch}`);
+      }
+      const result = await git.push(root, {
+        remote,
+        branch,
+        setUpstream: input.setUpstream === true,
+      });
+      return {
+        ok: true,
+        output: result.output,
+        remote: result.remote,
+        branch: result.branch,
+        setUpstream: result.setUpstream,
+        state: await readState(),
+      };
     }
 
     case "git.generateMessage":
@@ -466,9 +541,26 @@ async function registerCommands() {
     title: title("Git Workbench: Push", "Git Workbench：推送"),
     keywords: ["git", "push", "推送", "上传"],
     run: async () => {
-      const { root } = await repoContext();
-      const result = await git.push(root);
-      await pi.ui.showToast(result.output || (await strings()).pushed).catch(() => {});
+      const text = await strings();
+      try {
+        const { root } = await repoContext();
+        const plan = await git.pushPreflight(root);
+        /*
+         * A branch without an upstream, or a host whose key is not trusted yet,
+         * is confirmed in the panel instead of failing here.
+         */
+        const needsConfirm =
+          plan.needsUpstream || plan.ssh?.supported === false || plan.ssh?.known === false;
+        if (needsConfirm) {
+          await pi.ui.showToast(text.pushNeedsConfirm).catch(() => {});
+          await pi.ui.revealView({ viewId: "changes" }).catch(() => {});
+          return;
+        }
+        const result = await git.push(root, { remote: plan.remote, branch: plan.remoteBranch });
+        await pi.ui.showToast(result.output || text.pushed).catch(() => {});
+      } catch (error) {
+        await pi.ui.showToast(error?.message || String(error)).catch(() => {});
+      }
     },
   });
 }

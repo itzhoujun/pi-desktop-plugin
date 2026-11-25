@@ -84,7 +84,7 @@ const state = {
   signature: "",
   busy: null,
   collapsed: { staged: false, changes: false },
-  sheet: { mode: null, resolve: null },
+  sheet: { mode: null, resolve: null, collect: null },
   pollTimer: null,
   history: {
     repoRoot: null,
@@ -255,6 +255,34 @@ const STRINGS = {
     "err.DETACHED_HEAD": "当前处于游离 HEAD 状态，请先切换分支。",
     "err.PERMISSION_DENIED": "权限不足：请在插件页面授予所需权限后重新加载。",
     "err.INVALID_ARGUMENT": "参数不合法。",
+    "err.HOST_KEY_UNKNOWN": "尚未信任该主机的主机密钥：请在推送窗口中核对该主机的指纹后再推送。",
+    "err.HOST_KEY_CHANGED": "主机密钥与已记录的不一致，已拒绝写入。请确认远程主机没有被中间人替换。",
+    "err.AUTH_FAILED": "认证失败：请确认 SSH 密钥或凭据对该仓库有推送权限。",
+    "err.NO_UPSTREAM": "当前分支没有上游分支，请在推送窗口中确认远端分支。",
+    "err.NON_FAST_FORWARD": "远端存在本地没有的提交：请先拉取（git pull）再推送。",
+    "err.REPO_NOT_FOUND": "远端仓库不存在或没有访问权限，请检查远端地址。",
+    "err.NETWORK": "无法连接远端：请检查网络、代理或 SSH 端口。",
+    "err.SSH_UNAVAILABLE": "找不到 ssh、ssh-keygen 或 ssh-keyscan，无法确认主机指纹。",
+    "err.SSH_SCAN_FAILED": "未能从远端读取主机密钥，请检查网络后重试。",
+    "err.NO_KNOWN_HOSTS": "无法确定 known_hosts 文件的位置。",
+    "err.SSH_FAILED": "检查 SSH 主机指纹时出错。",
+    "err.GIT_FAILED": "git 操作失败。",
+    "push.title": "推送到远端",
+    "push.remote": "远端",
+    "push.remoteBranch": "远端分支",
+    "push.noUrl": "（未配置地址）",
+    "push.setUpstreamNew": "推送后会把该远端分支设为上游（git push --set-upstream）。",
+    "push.keepUpstream": "当前分支已关联上游；若改动远端或分支名，会一并更新上游。",
+    "push.hostTrusted": "主机 {0} 的主机密钥已在 known_hosts 中，无需再次确认。",
+    "push.hostKeyTitle": "确认主机 {0} 的指纹",
+    "push.hostKeyNote": "以下密钥由 ssh-keyscan 读取。请与托管方公布的指纹逐字核对；确认后只把这几个密钥写入 {0}。",
+    "push.hostKeyEmpty": "未能从该主机读取到主机密钥。",
+    "push.sshUnsupported": "无法检查主机指纹：{0}。推送仍可能因为主机密钥校验失败而中断。",
+    "push.branchInvalid": "分支名包含不允许的字符。",
+    "push.needKey": "请至少勾选一个要信任的主机指纹。",
+    "push.confirm": "确认并推送",
+    "push.busy": "推送中…",
+    "push.afterCommitFailed": "已提交，但推送失败：{0}",
     "html.branch": "当前分支",
     "html.pull": "拉取",
     "html.pullTip": "拉取（git pull）",
@@ -355,6 +383,34 @@ const STRINGS = {
     "err.DETACHED_HEAD": "HEAD is detached. Switch to a branch first.",
     "err.PERMISSION_DENIED": "Permission denied. Grant the permission on the Plugins page and reload.",
     "err.INVALID_ARGUMENT": "Invalid argument.",
+    "err.HOST_KEY_UNKNOWN": "This host's key is not trusted yet: check its fingerprints in the push dialog first.",
+    "err.HOST_KEY_CHANGED": "The host key does not match the recorded one, so nothing was written. Make sure the remote is not being impersonated.",
+    "err.AUTH_FAILED": "Authentication failed: check that your SSH key or credentials may push to this repository.",
+    "err.NO_UPSTREAM": "This branch has no upstream branch. Confirm the remote branch in the push dialog.",
+    "err.NON_FAST_FORWARD": "The remote has commits you do not have: pull first, then push.",
+    "err.REPO_NOT_FOUND": "The remote repository does not exist or you have no access. Check the remote URL.",
+    "err.NETWORK": "Cannot reach the remote: check your network, proxy or SSH port.",
+    "err.SSH_UNAVAILABLE": "ssh, ssh-keygen or ssh-keyscan was not found, so host keys cannot be confirmed.",
+    "err.SSH_SCAN_FAILED": "Could not read the host keys from this host. Check the network and try again.",
+    "err.NO_KNOWN_HOSTS": "Could not determine where the known_hosts file lives.",
+    "err.SSH_FAILED": "Checking the SSH host key failed.",
+    "err.GIT_FAILED": "The git command failed.",
+    "push.title": "Push to remote",
+    "push.remote": "Remote",
+    "push.remoteBranch": "Remote branch",
+    "push.noUrl": "(no URL configured)",
+    "push.setUpstreamNew": "This push also sets the remote branch as upstream (git push --set-upstream).",
+    "push.keepUpstream": "This branch already tracks an upstream; changing the remote or the branch name updates it too.",
+    "push.hostTrusted": "The host key of {0} is already in known_hosts, so nothing is asked.",
+    "push.hostKeyTitle": "Confirm the fingerprints of {0}",
+    "push.hostKeyNote": "These keys were read with ssh-keyscan. Compare them character by character with the fingerprints your host publishes; only the ticked keys are written to {0}.",
+    "push.hostKeyEmpty": "No host key could be read from this host.",
+    "push.sshUnsupported": "The host key cannot be checked: {0}. The push may still fail on host key verification.",
+    "push.branchInvalid": "The branch name contains characters that are not allowed.",
+    "push.needKey": "Tick at least one host key fingerprint to trust.",
+    "push.confirm": "Confirm and push",
+    "push.busy": "Pushing…",
+    "push.afterCommitFailed": "Committed, but the push failed: {0}",
     "html.branch": "Current branch",
     "html.pull": "Pull",
     "html.pullTip": "Pull (git pull)",
@@ -1225,7 +1281,7 @@ function onSplitterKey(event) {
 
 // ----------------------------------------------------------------------- sheet
 
-function openSheet({ title, sub, body, footer, mode }) {
+function openSheet({ title, sub, body, footer, mode, collect }) {
   els.sheetTitle.textContent = title || "";
   els.sheetSub.textContent = sub || "";
   els.sheetSub.hidden = !sub;
@@ -1239,6 +1295,7 @@ function openSheet({ title, sub, body, footer, mode }) {
     els.sheetFoot.hidden = true;
   }
   state.sheet.mode = mode || "info";
+  state.sheet.collect = typeof collect === "function" ? collect : null;
   els.overlay.dataset.mode = state.sheet.mode;
   els.overlay.hidden = false;
   els.sheetBack.focus();
@@ -1249,8 +1306,22 @@ function closeSheet(result) {
   delete els.overlay.dataset.mode;
   state.sheet.mode = null;
   const resolve = state.sheet.resolve;
+  const collect = state.sheet.collect;
   state.sheet.resolve = null;
-  if (resolve) resolve(Boolean(result));
+  state.sheet.collect = null;
+  if (!resolve) return;
+  if (result && collect) {
+    /* A form sheet resolves with what the user filled in, not with `true`. */
+    let value = null;
+    try {
+      value = collect();
+    } catch {
+      value = null;
+    }
+    resolve(value);
+    return;
+  }
+  resolve(Boolean(result));
 }
 
 function confirmAction(title, bodyHtml, confirmLabel) {
@@ -1440,7 +1511,10 @@ async function commit(forceAll) {
   loadHistory();
   const sha = result.commit?.shortSha ? `${result.commit.shortSha} ` : "";
   toast(`${t("toast.committed", sha)}${result.commit?.subject || ""}`.trim(), "success");
-  if (result.pushOutput !== null && result.pushOutput !== undefined) {
+  if (result.pushError) {
+    /* The commit is already in: report the push problem without hiding it. */
+    toast(t("push.afterCommitFailed", errorText(result.pushError)), "error");
+  } else if (result.pushOutput !== null && result.pushOutput !== undefined) {
     toast(firstLine(result.pushOutput) || t("toast.pushed"), "success");
   }
 }
@@ -1539,8 +1613,179 @@ async function pull() {
   toast(firstLine(result.output) || t("toast.upToDate"), "success");
 }
 
+/* ---------------------------------------------------------------------- push */
+
+/* The alphabet git.js accepts; the host checks it again before running git. */
+const BRANCH_RE = /^[A-Za-z0-9._/-]{1,120}$/;
+
+function hostLabel(info) {
+  const host = info?.host || "";
+  return info?.port && info.port !== 22 ? `${host}:${info.port}` : host;
+}
+
+/** The ssh preflight result, rendered inside the push sheet. */
+function hostKeyHtml(info) {
+  if (!info) return "";
+  if (info.supported === false) {
+    /* The mapped error already ends a sentence; the template adds its own. */
+    const reason = errorText({ code: info.code || "SSH_FAILED", message: info.error || "" }).replace(
+      /[.。\s]+$/,
+      "",
+    );
+    return `<p class="push-note warn">${escapeHtml(t("push.sshUnsupported", reason))}</p>`;
+  }
+  if (info.known) {
+    return `<p class="push-note ok">${escapeHtml(t("push.hostTrusted", hostLabel(info)))}</p>`;
+  }
+  const keys = Array.isArray(info.keys) ? info.keys : [];
+  if (keys.length === 0) {
+    return `<p class="push-note warn">${escapeHtml(t("push.hostKeyEmpty"))}</p>`;
+  }
+  const rows = keys
+    .map(
+      (key) =>
+        `<label class="push-key"><input type="checkbox" data-fingerprint value="${escapeHtml(
+          key.fingerprint,
+        )}" checked><span class="push-key-type">${escapeHtml(key.type)}</span>` +
+        `<span class="push-key-fp mono">${escapeHtml(key.fingerprint)}</span></label>`,
+    )
+    .join("");
+  return [
+    `<div class="push-host">`,
+    `<div class="push-host-title">${escapeHtml(t("push.hostKeyTitle", hostLabel(info)))}</div>`,
+    `<p class="push-note">${escapeHtml(t("push.hostKeyNote", info.knownHostsFile || ""))}</p>`,
+    `<div class="push-keys">${rows}</div>`,
+    `</div>`,
+  ].join("");
+}
+
+/**
+ * Ask for the remote, the remote branch and — when the host key is unknown —
+ * which fingerprints to trust. Resolves null when the user backs out.
+ */
+function confirmPushPlan(plan) {
+  const upstreamRemote = String(plan.upstream || "").split("/")[0] || "";
+  const options = (Array.isArray(plan.remotes) ? plan.remotes : [])
+    .map(
+      (item) =>
+        `<option value="${escapeHtml(item.name)}"${item.name === plan.remote ? " selected" : ""}>` +
+        `${escapeHtml(item.name)} — ${escapeHtml(item.url || t("push.noUrl"))}</option>`,
+    )
+    .join("");
+  const target = `${plan.remote}/${plan.remoteBranch}`;
+  const body = [
+    `<div class="confirm-body push-confirm">`,
+    `<div class="push-grid">`,
+    `<label class="push-field"><span class="push-label">${t("push.remote")}</span>`,
+    `<select class="field" id="pushRemote">${options}</select></label>`,
+    `<label class="push-field"><span class="push-label">${t("push.remoteBranch")}</span>`,
+    `<input class="field mono" id="pushBranch" value="${escapeHtml(plan.remoteBranch)}" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="${t(
+      "push.remoteBranch",
+    )}"></label>`,
+    `</div>`,
+    `<p class="push-target"><code class="mono">${escapeHtml(plan.branch)}</code>` +
+      `<span class="push-arrow">→</span><code class="mono" id="pushPreview">${escapeHtml(target)}</code></p>`,
+    `<p class="push-note">${plan.needsUpstream ? t("push.setUpstreamNew") : t("push.keepUpstream")}</p>`,
+    hostKeyHtml(plan.ssh),
+    `<p class="push-note warn" id="pushHint" hidden></p>`,
+    `</div>`,
+  ].join("");
+
+  const footer = [
+    `<button class="btn" data-answer="0">${t("confirm.cancel")}</button>`,
+    `<button class="btn btn-primary" id="pushConfirm" data-answer="1">${t("push.confirm")}</button>`,
+  ].join("");
+
+  return new Promise((resolve) => {
+    state.sheet.resolve = resolve;
+    openSheet({
+      title: t("push.title"),
+      sub: plan.remoteUrl || "",
+      body,
+      footer,
+      mode: "push",
+      collect: () => {
+        const remote = els.sheetBody.querySelector("#pushRemote")?.value || plan.remote;
+        const typed = String(els.sheetBody.querySelector("#pushBranch")?.value || "").trim();
+        const trust = Array.from(
+          els.sheetBody.querySelectorAll("input[data-fingerprint]:checked"),
+        ).map((node) => node.value);
+        return {
+          remote,
+          branch: typed || plan.branch,
+          /* Keep tracking when the upstream moves, is gone, or was never set. */
+          setUpstream:
+            plan.needsUpstream || (Boolean(upstreamRemote) && remote !== upstreamRemote),
+          trust,
+        };
+      },
+    });
+    wirePushSheet(plan);
+  });
+}
+
+/** Live feedback: an impossible remote branch or an unticked host key blocks OK. */
+function wirePushSheet(plan) {
+  const remote = els.sheetBody.querySelector("#pushRemote");
+  const branch = els.sheetBody.querySelector("#pushBranch");
+  const hint = els.sheetBody.querySelector("#pushHint");
+  const preview = els.sheetBody.querySelector("#pushPreview");
+  const confirm = els.sheetFoot.querySelector("#pushConfirm");
+  if (!branch || !confirm) return;
+  /* An untrusted host must be ticked, otherwise the push fails on verification. */
+  const mustTrust = plan.ssh?.supported !== false && plan.ssh?.known === false;
+
+  const validate = () => {
+    const value = branch.value.trim();
+    let message = "";
+    if (!BRANCH_RE.test(value)) {
+      message = t("push.branchInvalid");
+    } else if (mustTrust && !els.sheetBody.querySelector("input[data-fingerprint]:checked")) {
+      message = t("push.needKey");
+    }
+    confirm.disabled = Boolean(message);
+    if (hint) {
+      hint.textContent = message;
+      hint.hidden = !message;
+    }
+    if (preview) preview.textContent = `${remote?.value || plan.remote}/${value || plan.branch}`;
+  };
+
+  branch.addEventListener("input", validate);
+  if (remote) remote.addEventListener("change", validate);
+  els.sheetBody.addEventListener("change", (event) => {
+    if (event.target?.matches?.("input[data-fingerprint]")) validate();
+  });
+  validate();
+}
+
 async function push() {
-  const result = await withBusy("push", () => invoke("git.push"));
+  const preflight = await withBusy("push", () => invoke("git.pushPreflight"));
+  if (!preflight?.plan) return;
+  const plan = preflight.plan;
+  /*
+   * Ask only when the answer changes the command: a branch that already tracks
+   * its remote on a trusted host pushes without a dialog.
+   */
+  const needsConfirm =
+    plan.needsUpstream || plan.ssh?.supported === false || plan.ssh?.known === false;
+  let choice = { remote: plan.remote, branch: plan.remoteBranch, setUpstream: false, trust: [] };
+  if (needsConfirm) {
+    const answer = await confirmPushPlan(plan);
+    if (!answer) return;
+    choice = answer;
+  }
+
+  const result = await withBusy("push", async () => {
+    if (choice.trust.length > 0) {
+      await invoke("git.trustSshHost", { remote: choice.remote, fingerprints: choice.trust });
+    }
+    return invoke("git.push", {
+      remote: choice.remote,
+      branch: choice.branch,
+      setUpstream: choice.setUpstream,
+    });
+  });
   if (!result) return;
   applyState(result.state);
   loadHistory();
@@ -1684,7 +1929,8 @@ function bindEvents() {
   });
 
   els.overlay.addEventListener("click", (event) => {
-    if (event.target === els.overlay && state.sheet.mode === "confirm") closeSheet(false);
+    if (event.target !== els.overlay) return;
+    if (state.sheet.mode === "confirm" || state.sheet.mode === "push") closeSheet(false);
   });
 
   document.addEventListener("keydown", (event) => {
