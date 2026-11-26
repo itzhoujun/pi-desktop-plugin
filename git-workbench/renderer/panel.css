@@ -499,6 +499,9 @@ textarea#message:focus {
 .commit-btn[data-mode="sync"] .ico-sync {
   display: block;
 }
+.commit-btn[data-busy="true"] .ico-sync {
+  animation: spin 1s linear infinite;
+}
 
 .commit-split[hidden] {
   display: none;

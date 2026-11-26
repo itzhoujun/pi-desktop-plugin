@@ -876,6 +876,11 @@ function refreshButtons() {
   }
   els.pullBtn.dataset.busy = busyLabel === "pull" ? "true" : "false";
   els.pushBtn.dataset.busy = busyLabel === "push" ? "true" : "false";
+  /* Remote work spins the circular-arrow glyphs, whichever button started it. */
+  const remoteBusy = busyLabel === "refresh" || busyLabel === "pull" || busyLabel === "push";
+  els.refreshBtn.dataset.busy = remoteBusy ? "true" : "false";
+  els.commitBtn.dataset.busy =
+    (sync && (busyLabel === "pull" || busyLabel === "push")) ? "true" : "false";
 }
 
 function renderLists() {
