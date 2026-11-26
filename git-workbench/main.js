@@ -5,6 +5,8 @@
  *
  * Plugin id : local.git-workbench
  * View      : work-panel view "changes" (contributes.views)
+ * Commands  : none — the plugin contributes no commands, every action lives in
+ *             the work-panel view itself
  * Channels  : git.state / git.log / git.diff / git.commitFiles / git.commitDiff /
  *             git.stage / git.unstage / git.stageAll / git.unstageAll /
  *             git.discard / git.commit / git.pull / git.push / git.generateMessage /
@@ -18,6 +20,8 @@
  * - "Generate message" uses the host's one-shot completion API
  *   (pi.models.list + pi.agent.complete) and only sees the diff of the
  *   changes being committed — never the chat transcript.
+ * - No host commands are contributed on purpose: every git action starts from
+ *   the panel, so nothing runs without the panel on screen.
  *
  * Permissions
  * - ui.view          the work-panel view
@@ -44,10 +48,6 @@ const TEXT = {
     unknownError: "unknown error",
     emptyCompletion: "The model returned nothing. Try again.",
     notInChanges: "{0} is not part of the current changes.",
-    openPanel: "Open the work panel from a conversation first",
-    upToDate: "Already up to date",
-    pushed: "Pushed",
-    pushNeedsConfirm: "Confirm the remote and the SSH host key in the Git panel first.",
     pushFailed: "Push failed: {0}",
   },
   "zh-CN": {
@@ -59,10 +59,6 @@ const TEXT = {
     unknownError: "未知错误",
     emptyCompletion: "模型没有返回内容，请重试。",
     notInChanges: "{0} 不在当前改动中。",
-    openPanel: "请先在对话中打开右侧工作面板",
-    upToDate: "已是最新",
-    pushed: "已推送",
-    pushNeedsConfirm: "请先在 Git 面板中确认远端与 SSH 主机指纹。",
     pushFailed: "推送失败：{0}",
   },
 };
@@ -502,81 +498,7 @@ async function onPanelInvoke(channel, payload) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// lifecycle
-// ---------------------------------------------------------------------------
-
-async function registerCommands() {
-  const zh = isZh(await hostLocale());
-  const title = (en, cn) => (zh ? cn : en);
-
-  await pi.commands.register({
-    id: "git-workbench.open",
-    title: title("Git Workbench: Open", "Git Workbench：打开"),
-    keywords: ["git", "commit", "push", "pull", "提交", "推送", "拉取"],
-    run: async () => {
-      try {
-        await pi.ui.revealView({ viewId: "changes" });
-      } catch (error) {
-        const fallback = (await strings()).openPanel;
-        await pi.ui.showToast(error?.message || fallback).catch(() => {});
-      }
-    },
-  });
-
-  await pi.commands.register({
-    id: "git-workbench.pull",
-    title: title("Git Workbench: Pull", "Git Workbench：拉取"),
-    keywords: ["git", "pull", "拉取", "更新"],
-    run: async () => {
-      const { root } = await repoContext();
-      const result = await git.pull(root);
-      await pi.ui.showToast(result.output || (await strings()).upToDate).catch(() => {});
-      await pi.ui.revealView({ viewId: "changes" }).catch(() => {});
-    },
-  });
-
-  await pi.commands.register({
-    id: "git-workbench.push",
-    title: title("Git Workbench: Push", "Git Workbench：推送"),
-    keywords: ["git", "push", "推送", "上传"],
-    run: async () => {
-      const text = await strings();
-      try {
-        const { root } = await repoContext();
-        const plan = await git.pushPreflight(root);
-        /*
-         * A branch without an upstream, or a host whose key is not trusted yet,
-         * is confirmed in the panel instead of failing here.
-         */
-        const needsConfirm =
-          plan.needsUpstream || plan.ssh?.supported === false || plan.ssh?.known === false;
-        if (needsConfirm) {
-          await pi.ui.showToast(text.pushNeedsConfirm).catch(() => {});
-          await pi.ui.revealView({ viewId: "changes" }).catch(() => {});
-          return;
-        }
-        const result = await git.push(root, { remote: plan.remote, branch: plan.remoteBranch });
-        await pi.ui.showToast(result.output || text.pushed).catch(() => {});
-      } catch (error) {
-        await pi.ui.showToast(error?.message || String(error)).catch(() => {});
-      }
-    },
-  });
-}
-
-async function onLoad() {
-  await registerCommands();
-}
-
-async function onUnload() {
-  const ids = ["git-workbench.open", "git-workbench.pull", "git-workbench.push"];
-  await Promise.all(ids.map((id) => pi.commands.unregister(id).catch(() => {})));
-}
-
 module.exports = {
-  onLoad,
-  onUnload,
   onPanelInvoke,
   __test: { cleanCompletion, buildPrompt, readState, requirePaths },
 };

@@ -186,6 +186,11 @@ const STRINGS = {
     "banner.conflict": "存在未解决的合并冲突：解决冲突并暂存文件后再提交。",
     "commit.label": "提交",
     "commit.busy": "提交中…",
+    "commit.sync": "同步更改",
+    "commit.syncing": "同步中…",
+    "commit.syncPush": "没有待提交的更改：推送 {0} 个本地提交到远端。",
+    "commit.syncPull": "没有待提交的更改：从远端拉取 {0} 个提交。",
+    "commit.syncBoth": "没有待提交的更改：先拉取远端 {0} 个提交，再推送本地 {1} 个提交。",
     "commit.root": "（根提交）",
     "commit.noSubject": "（无提交说明）",
     "commit.origPath": "原路径 {0}",
@@ -314,6 +319,11 @@ const STRINGS = {
     "banner.conflict": "Unresolved merge conflicts: resolve them and stage the files before committing.",
     "commit.label": "Commit",
     "commit.busy": "Committing…",
+    "commit.sync": "Sync changes",
+    "commit.syncing": "Syncing…",
+    "commit.syncPush": "Nothing to commit: push {0} local commit(s) to the remote.",
+    "commit.syncPull": "Nothing to commit: pull {0} commit(s) from the remote.",
+    "commit.syncBoth": "Nothing to commit: pull {0} commit(s) from the remote, then push {1}.",
     "commit.root": "(root commit)",
     "commit.noSubject": "(no commit message)",
     "commit.origPath": "was {0}",
@@ -806,23 +816,66 @@ function renderHeader() {
   refreshButtons();
 }
 
+/*
+ * The commit button doubles as a sync button. A clean tree with commits the
+ * upstream does not have (or commits it has locally missing) cannot be
+ * committed, so the button switches to "Sync changes 1↑" and pulls/pushes
+ * instead; the commit options menu steps aside because none of it applies.
+ */
+function syncPlan(data) {
+  if (!data || !data.repo || data.detached) return null;
+  if (!data.upstream) return null;
+  const clean = typeof data.clean === "boolean"
+    ? data.clean
+    : !(data.counts && data.counts.total > 0);
+  if (!clean) return null;
+  const ahead = Number(data.ahead) || 0;
+  const behind = Number(data.behind) || 0;
+  return ahead > 0 || behind > 0 ? { ahead, behind } : null;
+}
+
+function syncLabel({ ahead, behind }) {
+  const counts = [];
+  if (ahead > 0) counts.push(`${ahead}↑`);
+  if (behind > 0) counts.push(`${behind}↓`);
+  return `${t("commit.sync")} ${counts.join(" ")}`;
+}
+
+function syncHint({ ahead, behind }) {
+  if (ahead > 0 && behind > 0) return t("commit.syncBoth", behind, ahead);
+  if (behind > 0) return t("commit.syncPull", behind);
+  return t("commit.syncPush", ahead);
+}
+
 function refreshButtons() {
   const data = state.data;
-  const busy = Boolean(state.busy);
+  const busyLabel = state.busy;
+  const busy = Boolean(busyLabel);
   const hasRepo = Boolean(data && data.repo);
   const dirty = Boolean(hasRepo && data.counts && data.counts.total > 0);
+  const sync = syncPlan(data);
 
   els.pullBtn.disabled = busy || !hasRepo;
   els.pushBtn.disabled = busy || !hasRepo;
   els.refreshBtn.disabled = busy || !hasRepo;
-  els.commitBtn.disabled = busy || !hasRepo || !dirty;
-  els.commitMenuBtn.disabled = busy || !hasRepo;
+  els.commitBtn.disabled = busy || !hasRepo || (!dirty && !sync);
+  els.commitMenuBtn.hidden = Boolean(sync);
+  els.commitMenuBtn.disabled = busy || !hasRepo || Boolean(sync);
+  if (sync) closeMenu();
   els.genBtn.disabled = busy || !hasRepo || !dirty;
-  els.genBtn.dataset.busy = state.busy === "generate" ? "true" : "false";
+  els.genBtn.dataset.busy = busyLabel === "generate" ? "true" : "false";
 
-  els.commitLabel.textContent = state.busy === "commit" ? t("commit.busy") : t("commit.label");
-  els.pullBtn.dataset.busy = state.busy === "pull" ? "true" : "false";
-  els.pushBtn.dataset.busy = state.busy === "push" ? "true" : "false";
+  els.commitBtn.dataset.mode = sync ? "sync" : "commit";
+  if (sync) {
+    els.commitBtn.title = syncHint(sync);
+    const syncing = busyLabel === "pull" || busyLabel === "push";
+    els.commitLabel.textContent = syncing ? t("commit.syncing") : syncLabel(sync);
+  } else {
+    els.commitBtn.removeAttribute("title");
+    els.commitLabel.textContent = busyLabel === "commit" ? t("commit.busy") : t("commit.label");
+  }
+  els.pullBtn.dataset.busy = busyLabel === "pull" ? "true" : "false";
+  els.pushBtn.dataset.busy = busyLabel === "push" ? "true" : "false";
 }
 
 function renderLists() {
@@ -1792,6 +1845,24 @@ async function push() {
   toast(firstLine(result.output) || t("toast.pushedShort"), "success");
 }
 
+/*
+ * Sync runs the two halves a clean, out-of-date branch needs: pull first so a
+ * push cannot be rejected as non-fast-forward, then push what is still local.
+ * Both halves reuse their own busy state, so the button reads "Syncing…" while
+ * the toolbar buttons spin as usual.
+ */
+async function syncChanges() {
+  const plan = syncPlan(state.data);
+  if (!plan) return;
+  if (plan.behind > 0) {
+    await pull();
+    const after = syncPlan(state.data);
+    /* A failed pull leaves the branch behind; pushing now would be refused. */
+    if (!after || after.behind > 0) return;
+  }
+  if (Number(state.data?.ahead) > 0) await push();
+}
+
 // ---------------------------------------------------------------------- events
 
 function closeMenu() {
@@ -1810,7 +1881,11 @@ function bindEvents() {
   els.refreshBtn.addEventListener("click", () => loadState());
   els.pullBtn.addEventListener("click", pull);
   els.pushBtn.addEventListener("click", push);
-  els.commitBtn.addEventListener("click", () => commit(undefined));
+  els.commitBtn.addEventListener("click", () => {
+    /* One button, two meanings: commit while there is work, otherwise sync. */
+    if (syncPlan(state.data)) return void syncChanges();
+    return void commit(undefined);
+  });
   els.genBtn.addEventListener("click", generateMessage);
 
   // User edits win over a running typewriter fill.
@@ -1950,6 +2025,8 @@ function bindEvents() {
     const withMod = IS_MAC ? event.metaKey : event.ctrlKey;
     if (withMod && event.key === "Enter") {
       event.preventDefault();
+      /* Same precedence as the primary button: sync wins when there is nothing to commit. */
+      if (syncPlan(state.data)) return void syncChanges();
       commit(event.shiftKey ? true : undefined);
     }
   });

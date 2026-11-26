@@ -3,15 +3,15 @@
 PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或生成提交信息、提交、拉取、推送，都在右侧面板完成；面板底部还有可折叠的提交历史，点开任一条即可看到它的属性、改动文件与差异。不打开终端，也不离开应用。
 
 - 插件 ID：`local.git-workbench`（`local.` 为本地/私有命名空间；如需强调归属可改成反向域形式，例如 `io.github.<user>.git-workbench`）
-- 版本：`0.2.0`　最低宿主版本：PI-Desktop `>=0.8.0`（`manifest.engines.piDesktop`）
-- 类型：工作面板视图（`ui.view`），无 Agent 工具、无设置项、无常驻后台服务
+- 版本：`0.3.0`　最低宿主版本：PI-Desktop `>=0.8.0`（`manifest.engines.piDesktop`）
+- 类型：工作面板视图（`ui.view`），不贡献任何宿主命令、无 Agent 工具、无设置项、无常驻后台服务
 - 许可证：[MIT](LICENSE)　变更日志：[CHANGELOG.md](CHANGELOG.md)
 
 ## 推送前的确认
 
 刚加好远端、第一次推送时，git 往往会直接失败：`fatal: The current branch main has no upstream branch.` 或 `Host key verification failed.`。面板把这两步变成显式确认，而不是让用户去终端补命令：
 
-1. 点「推送」或执行 `git-workbench.push` 时先跑预检：读当前分支、上游、ahead/behind、所有远端（地址已脱敏）与 SSH 主机指纹状态。
+1. 在面板里点「推送」时先跑预检：读当前分支、上游、ahead/behind、所有远端（地址已脱敏）与 SSH 主机指纹状态。
 2. 只有**需要确认**时才弹窗：当前分支没有上游（或上游已被删除）、主机密钥不在 `known_hosts`、或无法检查主机密钥。已关联上游且主机可信时保持零摩擦，直接推送。
 3. 弹窗里可以改远端（下拉列出全部远端及其地址）、改远端分支名，并逐条勾选要信任的主机指纹（默认全选，可取消）；主机名、端口、密钥类型与完整指纹都原样展示，方便与托管方公布的指纹逐字核对。
 4. 确认后先写入指纹（仅勾选的、且与重新扫描结果一致的那几条），再执行 `git push <remote> <branch>`；需要建立上游时加 `--set-upstream`，远端分支名与本地不同时用 `local:remote` refspec。
@@ -29,17 +29,12 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 
 提交语义：提交按钮只提交**已暂存**的改动；若没有任何已暂存改动则自动 `git add -A` 后再提交（与 VS Code 一致）。下拉菜单可强制指定。
 
-## 命令
-
-| 命令 ID | 标题 | 说明 |
-| --- | --- | --- |
-| `git-workbench.open` | Git Workbench: Open | 打开/聚焦右侧 Git 工作面板；插件激活时也会自动显示该视图 |
-| `git-workbench.pull` | Git Workbench: Pull | 对当前仓库执行 `git pull --no-rebase --no-edit`，面板会同步刷新 |
-| `git-workbench.push` | Git Workbench: Push | 需要确认（无上游 / 主机指纹未知）时提示到面板确认；否则直接推送 |
+同步语义：没有待提交的改动、但当前分支与它的上游已经分叉（`↑ahead` / `↓behind` 任一大于 0）时，主按钮从「提交」变成「同步更改 1↑」（两侧都有差异时显示 `同步更改 1↑ 2↓`），提交下拉菜单随之收起；点它先 `git pull --no-rebase --no-edit` 再推送，因此不会因为落后而被远端拒绝。按钮的悬浮提示会写明将要执行的动作，`⌘/Ctrl + Enter` 与主按钮行为一致。
 
 ## 设置与工具
 
 - **设置项**：无。插件不读写 `plugin.setSettings`。
+- **命令**：无。插件不声明 `contributes.commands`，也不调 `pi.commands.register`；打开、拉取、推送都只在面板里发起。
 - **Agent 工具**：无。插件不注册 `agentTools`，Agent 无法直接调用本插件。
 - **输入/输出**：没有 CLI 参数、没有 stdin 协议、没有导出文件；面板与主进程之间只走下面「面板通道」里的固定通道。
 
@@ -47,7 +42,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 
 | 权限 | 风险级别 | 用途 | 数据流向 |
 | --- | --- | --- | --- |
-| `ui.view` | 低 | 声明并显示右侧工作面板视图、注册上面的三条命令 | 仅在本机渲染 |
+| `ui.view` | 低 | 声明并显示右侧工作面板视图 | 仅在本机渲染 |
 | `models.list` | 低 | 列出用户已配置的可用模型，用于选择生成提交信息用的模型（默认模型优先） | 只读模型键，不含密钥 |
 | `agent.complete` | 高 | 用户点击 AI 按钮时执行一次 `pi.agent.complete` 生成提交信息 | 只发送本次要提交的 diff、变更文件列表、diffstat 与最近 8 条提交标题；不读对话历史、不读文件正文以外的内容、不读凭据 |
 
@@ -82,7 +77,7 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 
 - 判定规则：`locale` 以 `zh` 开头 → 中文；其余（`en-US`、`ja-JP`、`fr` …）→ 英文，不会中英混排。
 - 文案集中在 `renderer/panel.js` 的 `STRINGS`（`zh` / `en` 两份，键同名，`{0}`/`{1}` 为占位符），取用统一走 `t("key", ...)`；静态标记用 `data-i18n` / `data-i18n-title` / `data-i18n-aria` / `data-i18n-placeholder` 挂接。
-- 相对时间由 `Intl.RelativeTimeFormat` 按 `zh-CN` / `en` 生成；主进程侧文案在 `main.js` 的 `TEXT`，命令名用 `title(en, zh)`。
+- 相对时间由 `Intl.RelativeTimeFormat` 按 `zh-CN` / `en` 生成；主进程侧文案同样在 `main.js` 的 `TEXT`（与 `renderer/panel.js` 的 `STRINGS` 一样按 `zh` / `en` 两份维护）。
 - `manifest.json` 的 `i18n` 提供中英文名称与描述，插件中心据此显示两种语言的条目。
 
 ## 面板通道（`onPanelInvoke`）
@@ -125,8 +120,8 @@ PI-Desktop 工作面板里的 Git 客户端：看改动、暂存/放弃、写或
 插件目录即源码，可直接在 PI-Desktop「插件 → 加载开发插件」中选中本目录，保存后热重载（改 `permissions` 或 `manifest.fs` 除外，需在插件行「更多 → 重新加载」里重新授权）。
 
 ```
-manifest.json          # 身份、视图/命令贡献、权限、i18n
-main.js                # 生命周期、onPanelInvoke 通道、LLM 提交信息
+manifest.json          # 身份、视图贡献、权限、i18n
+main.js                # onPanelInvoke 通道、LLM 提交信息
 git.js                 # git 执行层与 porcelain 解析器
 ssh.js                 # SSH 远端解析、known_hosts 查询、主机指纹扫描与信任写入
 renderer/index.html    # 视图页面

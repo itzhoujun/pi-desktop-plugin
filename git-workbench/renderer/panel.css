@@ -486,6 +486,24 @@ textarea#message:focus {
   height: 15px;
 }
 
+/*
+ * The commit button turns into a sync button when the tree is clean but the
+ * branch and its upstream differ: data-mode picks the icon and the split menu
+ * (commit options that cannot apply) steps aside.
+ */
+.commit-btn .ico-sync,
+.commit-btn[data-mode="sync"] .ico-commit {
+  display: none;
+}
+
+.commit-btn[data-mode="sync"] .ico-sync {
+  display: block;
+}
+
+.commit-split[hidden] {
+  display: none;
+}
+
 .commit-split {
   flex: none;
   width: 32px;

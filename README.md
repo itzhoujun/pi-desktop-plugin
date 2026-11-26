@@ -6,7 +6,7 @@ PI-Desktop 插件的源码集合，一个子目录一个插件，各自独立可
 
 | 目录 | 插件 ID | 版本 | 说明 | 市场 |
 | --- | --- | --- | --- | --- |
-| [`git-workbench/`](git-workbench/README.md) | `local.git-workbench` | 0.1.0 | 右侧工作面板里的 Git 客户端：改动文件、暂存/放弃、AI 生成提交信息、提交、拉取、推送，可折叠提交历史与分栏 diff，跟随宿主主题、中英双语 | [plugins.aiuo.net/plugins/local.git-workbench](https://plugins.aiuo.net/plugins/local.git-workbench) |
+| [`git-workbench/`](git-workbench/README.md) | `local.git-workbench` | 0.3.0 | 右侧工作面板里的 Git 客户端：改动文件、暂存/放弃、AI 生成提交信息、提交、拉取、推送，可折叠提交历史与分栏 diff，跟随宿主主题、中英双语；不贡献宿主命令，所有操作都从面板发起 | [plugins.aiuo.net/plugins/local.git-workbench](https://plugins.aiuo.net/plugins/local.git-workbench) |
 
 新插件直接在本目录下新建子目录，不要让两个插件共用一份 `manifest.json` 或 `main.js`——宿主按目录加载插件，共享代码只能通过复制或独立的 npm 包解决。
 
