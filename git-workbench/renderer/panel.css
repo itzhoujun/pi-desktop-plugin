@@ -409,8 +409,11 @@ textarea#message::placeholder {
   color: var(--muted-dim);
 }
 
+/*
+ * The composer keeps its neutral border while focused: the caret already marks
+ * focus, and the accent ring read as a stray blue box inside the input.
+ */
 textarea#message:focus {
-  border-color: color-mix(in oklab, var(--accent) 62%, transparent);
   outline: none;
 }
 
@@ -423,11 +426,12 @@ textarea#message:focus {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  border: 1px solid color-mix(in oklab, var(--commit) 45%, transparent);
   border-radius: 9px;
   /* Always visible, not only on hover: this is the AI affordance. */
-  background: color-mix(in oklab, var(--accent) 18%, transparent);
-  color: var(--accent);
+  background: color-mix(in oklab, var(--commit) 18%, transparent);
+  /* Same colour variable as the commit button, so it follows the host theme. */
+  color: var(--commit);
 }
 
 .gen-btn .ico {
@@ -436,9 +440,8 @@ textarea#message:focus {
 }
 
 .gen-btn:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--accent) 30%, transparent);
-  border-color: color-mix(in oklab, var(--accent) 65%, transparent);
-  color: var(--fg-strong);
+  background: color-mix(in oklab, var(--commit) 30%, transparent);
+  border-color: color-mix(in oklab, var(--commit) 65%, transparent);
 }
 
 .gen-btn:disabled {
