@@ -4,6 +4,21 @@
   "name": "Run Deck",
   "version": "0.1.0",
   "description": "Run Deck keeps a project's launch commands one click away in a work-panel tab: start and stop them, watch their output, and let the agent manage the list.",
+  "i18n": {
+    "en": {
+      "name": "Run Deck",
+      "description": "Keeps a project's launch commands one tab away in the work panel: start and stop them, watch their output live, and let the agent manage the list. Each launch can pin its own working directory and environment variables.",
+      "safetyNotes": "Runs the commands the user writes, through the user's own login shell, in the launch's working directory (the project root when unset), with the optional environment overrides merged in. Output is captured in memory and shown in a read-only terminal. At load it runs the user's shell once, interactively and as a login shell, to read the real PATH; that probe is capped at 5 seconds and everything except the PATH value is discarded. Launch configuration is stored only in the plugin's private data directory, never in the workspace, and environment values are stored there in plain text. No network access and no other files are read."
+    },
+    "zh-CN": {
+      "name": "Run Deck",
+      "description": "把项目的启动命令放进工作面板的一个标签页：一键启动、停止，实时查看输出，Agent 也能直接维护这份列表。每条启动项都可以指定自己的工作目录和环境变量。",
+      "safetyNotes": "执行的是用户自己写的命令，通过用户自己的登录 shell，在启动项指定的工作目录（未指定则为项目根目录）中运行，并合并用户可选填的环境变量。输出保存在内存中，显示在只读终端里。插件加载时会以登录且交互的方式执行一次用户的 shell 以读取真实的 PATH，该探测限时 5 秒，除 PATH 外的输出全部丢弃。启动项配置只保存在插件的私有数据目录，不写入工作区；环境变量以明文保存在该目录中。不访问网络，也不读取其他文件。"
+    }
+  },
+  "author": "PI-Desktop",
+  "categories": ["developer-tools"],
+  "safetyNotes": "Runs the commands the user writes, through the user's own login shell, in the launch's working directory (the project root when unset), with the optional environment overrides merged in. Output is captured in memory and shown in a read-only terminal. At load it runs the user's shell once, interactively and as a login shell, to read the real PATH; that probe is capped at 5 seconds and everything except the PATH value is discarded. Launch configuration is stored only in the plugin's private data directory, never in the workspace, and environment values are stored there in plain text. No network access and no other files are read.",
   "main": "main.js",
   "contributes": {
     "views": [
