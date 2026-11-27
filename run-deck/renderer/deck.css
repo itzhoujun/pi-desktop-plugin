@@ -1,0 +1,296 @@
+/* Layout only. Every colour, radius, size and transition comes from
+   host-tokens.css / host-controls.css so the tab matches the host chrome. */
+
+/* Before the host answers, fall back to the OS scheme rather than guessing. */
+:root {
+  color-scheme: light dark;
+}
+
+/* The output panel and the xterm canvas inside it share one colour. Light uses
+   the page white — the panel belongs to the page, it is not a gray block laid on
+   top of it — while dark keeps the recessed inset so the panel still separates
+   from the list. app.js reads this same token for the terminal theme. */
+:root[data-theme=light] {
+  --deck-term-bg: var(--ds-bg-primary);
+}
+
+:root[data-theme=dark] {
+  --deck-term-bg: var(--ds-bg-inset);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* The host paints html/body transparent; the page must paint its own surface. */
+#app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--pi-plugin-panel-page-background, var(--ds-bg-primary, Canvas));
+  color: var(--pi-plugin-panel-page-foreground, var(--ds-text-primary, CanvasText));
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+#bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+#project {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ds-text-primary);
+  font-size: var(--text-sm-plus);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#count {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--ds-bg-chip);
+  color: var(--ds-text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The editor is a modal: the fields plus the env box need more room than the
+   inline form had, and the list must stay visible behind it. */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in oklab, var(--ds-bg-inset) 45%, transparent);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: var(--radius-md);
+  background: var(--ds-bg-elevated-opaque, var(--ds-bg-elevated));
+  box-shadow: var(--ds-raised-shadow);
+}
+
+.dialog-title {
+  margin: 0 0 3px;
+  color: var(--ds-text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dialog-label {
+  margin-top: 5px;
+  color: var(--ds-text-muted);
+  font-size: var(--text-2xs);
+}
+
+/* Height comes from `rows` so the command box (2 lines) and the env box (3
+   lines) each get their own; both can still be dragged taller. */
+.dialog textarea.field {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.dialog-hint {
+  margin: 2px 0 0;
+  color: var(--ds-text-faint);
+  font-size: var(--text-2xs);
+  line-height: var(--leading);
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dialog-actions .spacer {
+  flex: 1 1 auto;
+}
+
+#list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.row:hover {
+  background: var(--ds-bg-hover);
+}
+
+.row[data-expanded="true"] {
+  background: var(--ds-tile);
+}
+
+.row-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 4px 6px 8px;
+  border-radius: var(--radius-xs);
+  text-align: left;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-round, 50%);
+  background: var(--ds-text-faint);
+}
+
+.dot[data-state="running"] {
+  background: var(--ds-success);
+}
+
+.dot[data-state="stopping"] {
+  background: var(--ds-warning);
+}
+
+.dot[data-state="exited"] {
+  background: var(--ds-text-faint);
+}
+
+.dot[data-state="failed"] {
+  background: var(--ds-error);
+}
+
+.col {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--ds-text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd {
+  overflow: hidden;
+  color: var(--ds-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.port {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--ds-bg-chip);
+  color: var(--ds-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+
+#empty {
+  padding: 28px 16px;
+  color: var(--ds-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+  text-align: center;
+}
+
+#detail {
+  display: flex;
+  flex: 0 0 45%;
+  flex-direction: column;
+  min-height: 140px;
+  border-top: 1px solid var(--ds-border-subtle);
+  background: var(--deck-term-bg, var(--ds-bg-primary));
+}
+
+.detail-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 12px;
+}
+
+#detail-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ds-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#term {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 6px 6px;
+}
+
+#status {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 5;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--ds-bg-elevated-opaque, var(--ds-bg-elevated));
+  box-shadow: var(--ds-raised-shadow);
+  color: var(--ds-text-primary);
+  font-size: var(--text-sm);
+}
+
+#status[data-kind="error"] {
+  color: var(--ds-error);
+}
+
+[hidden] {
+  display: none !important;
+}

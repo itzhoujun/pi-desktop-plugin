@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "local.run-deck",
+  "name": "Run Deck",
+  "version": "0.1.0",
+  "description": "Run Deck keeps a project's launch commands one click away in a work-panel tab: start and stop them, watch their output, and let the agent manage the list.",
+  "main": "main.js",
+  "contributes": {
+    "views": [
+      {
+        "id": "deck",
+        "title": {
+          "en": "Run Deck",
+          "zh-CN": "启动台"
+        },
+        "icon": "terminal",
+        "entry": "renderer/index.html",
+        "order": 20
+      }
+    ]
+  },
+  "permissions": [
+    "ui.view",
+    "agent.tool.register"
+  ],
+  "engines": {
+    "piDesktop": ">=0.23.0"
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

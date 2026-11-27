@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Run Deck</title>
+    <link rel="stylesheet" href="vendor/xterm.css" />
+    <link rel="stylesheet" href="host-tokens.css" />
+    <link rel="stylesheet" href="host-controls.css" />
+    <link rel="stylesheet" href="deck.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="bar">
+        <span id="project">—</span>
+        <span id="count"></span>
+        <button id="add" class="icon-btn icon-btn-square" type="button" title="Add launch">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+        </button>
+      </header>
+
+      <ul id="list"></ul>
+      <div id="empty" hidden>
+        <span data-i18n="emptyLine1">No launch commands yet.</span><br />
+        <span data-i18n="emptyLine2">Add one with ＋, or ask the agent.</span>
+      </div>
+
+      <section id="detail" hidden>
+        <div class="detail-bar">
+          <code id="detail-cmd"></code>
+          <button id="detail-stop" class="icon-btn icon-btn-square" type="button" title="Stop">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="4.2" y="4.2" width="7.6" height="7.6" rx="1.4" fill="currentColor" stroke="none" /></svg>
+          </button>
+          <button id="detail-clear" class="icon-btn icon-btn-square" type="button" title="Clear output">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3.4 8.6 8.6 3.4a1.2 1.2 0 0 1 1.7 0l2.3 2.3a1.2 1.2 0 0 1 0 1.7L7.4 12.6H4.6l-1.2-1.2a2 2 0 0 1 0-2.8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /><path d="M6.4 5.6 11 10.2" fill="none" stroke="currentColor" stroke-width="1.3" /></svg>
+          </button>
+          <button id="detail-close" class="icon-btn icon-btn-square" type="button" title="Close">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+          </button>
+        </div>
+        <div id="term"></div>
+      </section>
+
+      <div id="dialog" class="dialog-backdrop" hidden>
+        <form id="dialog-form" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+          <h2 id="dlg-title" class="dialog-title"></h2>
+          <label class="dialog-label" for="dlg-name" data-i18n="formName">Name</label>
+          <input class="field" id="dlg-name" type="text" maxlength="60" autocomplete="off" spellcheck="false" />
+          <label class="dialog-label" for="dlg-command" data-i18n="formCommand">Command</label>
+          <textarea class="field field-mono" id="dlg-command" rows="3" maxlength="2000" spellcheck="false" autocomplete="off" placeholder="npm run dev"></textarea>
+          <label class="dialog-label" for="dlg-cwd" data-i18n="formCwd">Working directory</label>
+          <input class="field field-mono" id="dlg-cwd" type="text" maxlength="500" autocomplete="off" spellcheck="false" />
+          <label class="dialog-label" for="dlg-env" data-i18n="formEnv">Environment variables</label>
+          <textarea class="field field-mono" id="dlg-env" rows="3" spellcheck="false"></textarea>
+          <p class="dialog-hint" data-i18n="envHint">One KEY=value per line.</p>
+          <div class="dialog-actions">
+            <button class="btn btn-ghost btn-danger" type="button" id="dlg-delete" hidden data-i18n="delete">Delete</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost" type="button" id="dlg-cancel" data-i18n="cancel">Cancel</button>
+            <button class="btn btn-primary" type="submit" data-i18n="save">Save</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="status" hidden></div>
+    </div>
+
+    <script src="vendor/xterm.js"></script>
+    <script src="vendor/addon-fit.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

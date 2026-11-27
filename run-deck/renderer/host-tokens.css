@@ -1,0 +1,135 @@
+/* Design tokens copied verbatim from the PI-Desktop renderer stylesheet
+   (out/renderer/assets/index-*.css, v0.23.0): colour scale, type scale,
+   radii, motion and the full --ds-* semantic set for dark and light.
+   A plugin page is a separate webContents, so the host's CSS variables are
+   not inherited; these are the host's own definitions, not invented values. */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-scale: 1;
+  --text-3xs: calc(10.5px * var(--font-scale));
+  --text-2xs: calc(11px * var(--font-scale));
+  --text-xs: calc(11px * var(--font-scale));
+  --text-xs-plus: calc(11.5px * var(--font-scale));
+  --text-sm: calc(12px * var(--font-scale));
+  --text-sm-plus: calc(12.5px * var(--font-scale));
+  --text-md: calc(13px * var(--font-scale));
+  --text-md-plus: calc(13.5px * var(--font-scale));
+  --text-base: calc(14px * var(--font-scale));
+  --text-base-plus: calc(15px * var(--font-scale));
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-medium-plus: 520;
+  --font-weight-strong: 560;
+  --font-weight-semibold: 600;
+  --leading: 1.45;
+  --radius-3xs: 4px;
+  --radius-2xs: 6px;
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --motion-duration-fast: .15s;
+  --motion-duration-normal: .2s;
+  --motion-ease-out: cubic-bezier(.22, 1, .36, 1);
+  --motion-ease-standard: cubic-bezier(.2, 0, 0, 1);
+  --ds-control-size: 28px;
+  --ds-toolbar-height: 46px;
+}
+
+/* dark is the host default */
+:root,
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --gray-0: #fff;
+  --gray-50: #f9f9f9;
+  --gray-75: #f3f3f3;
+  --gray-100: #ededed;
+  --gray-300: #afafaf;
+  --gray-500: #5d5d5d;
+  --gray-550: #4f4f4f;
+  --gray-600: #414141;
+  --gray-700: #303030;
+  --gray-750: #282828;
+  --gray-800: #212121;
+  --gray-900: #181818;
+  --gray-1000: #0d0d0d;
+  --ds-bg-primary: var(--gray-900);
+  --ds-bg-secondary: var(--gray-800);
+  --ds-bg-tertiary: var(--gray-750);
+  --ds-bg-inset: var(--gray-1000);
+  --ds-bg-under: #000;
+  --ds-bg-dock: var(--ds-bg-secondary);
+  --ds-bg-elevated: color-mix(in oklab, var(--gray-800) 96%, transparent);
+  --ds-bg-elevated-opaque: var(--gray-750);
+  --ds-bg-hover: color-mix(in oklab, var(--gray-0) 6%, transparent);
+  --ds-bg-active: color-mix(in oklab, var(--gray-0) 10%, transparent);
+  --ds-bg-chip: color-mix(in oklab, var(--gray-0) 6%, transparent);
+  --ds-text-primary: var(--gray-0);
+  --ds-text-secondary: color-mix(in oklab, var(--gray-0) 70%, transparent);
+  --ds-text-muted: color-mix(in oklab, var(--gray-0) 52%, transparent);
+  --ds-text-faint: color-mix(in oklab, var(--gray-0) 38%, transparent);
+  --ds-placeholder-ink: color-mix(in oklab, var(--gray-0) 42%, transparent);
+  --ds-border-default: color-mix(in oklab, var(--gray-0) 8%, transparent);
+  --ds-border-subtle: color-mix(in oklab, var(--gray-0) 5%, transparent);
+  --ds-border-strong: color-mix(in oklab, var(--gray-0) 14%, transparent);
+  --ds-tile: color-mix(in oklab, var(--gray-0) 3.5%, transparent);
+  --ds-tile-hover: color-mix(in oklab, var(--gray-0) 6%, transparent);
+  --ds-tile-deep: color-mix(in oklab, var(--gray-0) 8%, transparent);
+  --ds-raised: var(--gray-750);
+  --ds-raised-shadow: 0 1px 2px #00000059;
+  --ds-accent: var(--gray-0);
+  --ds-accent-hover: var(--gray-100);
+  --ds-accent-soft: var(--gray-300);
+  --ds-focus: var(--ds-accent);
+  --ds-field-inset-bg: color-mix(in oklab, var(--ds-text-primary) 5%, transparent);
+  --ds-field-inset-focus-bg: color-mix(in oklab, var(--ds-text-primary) 7%, transparent);
+  --ds-settings-field-bg: #212121;
+  --ds-success: #40c977;
+  --ds-warning: #ff8549;
+  --ds-error: #ff6764;
+  --ds-info: var(--gray-300);
+  --ds-scrim: oklab(0% none none/.45);
+}
+
+:root[data-theme=light] {
+  color-scheme: light;
+  --ds-bg-primary: #fff;
+  --ds-bg-secondary: #f9f9f9;
+  --ds-bg-tertiary: #f3f3f3;
+  --ds-bg-inset: #ededed;
+  --ds-bg-under: #f9f9f9;
+  --ds-bg-dock: #fafafa;
+  --ds-bg-elevated: oklab(100% 0 5.96046e-8/.7);
+  --ds-bg-elevated-opaque: #fff;
+  --ds-bg-hover: oklab(22.5591% -.00132438 -.00643148/.05);
+  --ds-bg-active: oklab(22.5591% -.00132438 -.00643148/.08);
+  --ds-bg-chip: oklab(22.5591% -.00132438 -.00643148/.04);
+  --ds-text-primary: #1a1c1f;
+  --ds-text-secondary: oklab(22.5591% -.00132438 -.00643148/.74);
+  --ds-text-muted: #5d5d5d;
+  --ds-text-faint: #afafaf;
+  --ds-placeholder-ink: #4a4c4f;
+  --ds-border-default: oklab(22.5591% -.00132438 -.00643148/.08);
+  --ds-border-subtle: oklab(22.5591% -.00132438 -.00643148/.05);
+  --ds-border-strong: oklab(22.5591% -.00132438 -.00643148/.12);
+  --ds-tile: oklab(22.5591% -.00132438 -.00643148/.035);
+  --ds-tile-hover: oklab(22.5591% -.00132438 -.00643148/.06);
+  --ds-tile-deep: oklab(22.5591% -.00132438 -.00643148/.08);
+  --ds-raised: #fff;
+  --ds-raised-shadow: 0 1px 2px #0000001a, 0 0 0 .5px #0000000a;
+  --ds-accent: #1a1c1f;
+  --ds-accent-hover: #303030;
+  --ds-accent-soft: #5d5d5d;
+  --ds-focus: var(--ds-accent);
+  --ds-field-inset-bg: #f3f3f3;
+  --ds-field-inset-focus-bg: #fff;
+  --ds-settings-field-bg: #fff;
+  --ds-success: #00a240;
+  --ds-warning: #e25507;
+  --ds-error: #e02e2a;
+  --ds-info: #5d5d5d;
+  --ds-scrim: oklab(22.5591% -.00132438 -.00643148/.28);
+}

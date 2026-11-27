@@ -1,0 +1,150 @@
+/* Controls copied from the host's own stylesheet so that buttons, icon
+   buttons and text fields look exactly like the rest of the app.
+   Only the first block is ours: the subset of the host's Tailwind preflight
+   that the copied rules rely on (a plugin page has no Tailwind reset). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+:where(button, [role="button"], input, textarea, select):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ds-accent) 30%, transparent);
+}
+
+:where(button, input, textarea, select):disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+/* --- host rules, verbatim --------------------------------------------- */
+
+.btn {
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md);
+  transition: background var(--motion-duration-fast) var(--motion-ease-out), color var(--motion-duration-fast) var(--motion-ease-out), opacity var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  display: inline-flex;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(.98);
+}
+
+.btn-primary {
+  background: var(--ds-accent);
+  color: var(--ds-bg-primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--ds-accent-hover);
+  opacity: 1;
+}
+
+.btn-secondary {
+  background: var(--ds-tile-hover);
+  color: var(--ds-text-primary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--ds-tile-deep);
+}
+
+.btn-ghost {
+  color: var(--ds-text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+}
+
+.icon-btn {
+  border-radius: var(--radius-full);
+  min-width: 28px;
+  height: 28px;
+  color: var(--ds-text-secondary);
+  transition: background var(--motion-duration-fast) var(--motion-ease-out), color var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  display: inline-flex;
+}
+
+.icon-btn:hover {
+  background: var(--ds-bg-hover);
+  color: var(--ds-text-primary);
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: scale(.96);
+}
+
+.icon-btn.icon-btn-square {
+  width: var(--ds-control-size);
+  height: var(--ds-control-size);
+  flex: 0 0 var(--ds-control-size);
+  padding: 0;
+}
+
+/* Destructive action: host has no danger variant, so the token is the only
+   thing we add. */
+.btn.btn-danger {
+  color: var(--ds-error);
+}
+
+/* Field look, same tokens as the host's own inputs
+   (.plugins-search / .plugins-reviews-composer-field). */
+.field {
+  width: 100%;
+  border: 0;
+  outline: none;
+  border-radius: var(--radius-sm);
+  background: var(--ds-field-inset-bg);
+  color: var(--ds-text-primary);
+  transition: background var(--motion-duration-fast) var(--motion-ease-out), box-shadow var(--motion-duration-fast) var(--motion-ease-out);
+  padding: 7px 10px;
+  font-size: var(--text-md);
+}
+
+.field::placeholder {
+  color: var(--ds-placeholder-ink);
+}
+
+.field:focus,
+.field:focus-visible {
+  background: var(--ds-field-inset-focus-bg);
+}
+
+.field.field-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm-plus);
+}
+
+select.field {
+  cursor: pointer;
+}
